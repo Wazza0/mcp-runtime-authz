@@ -1,62 +1,39 @@
 # mcp-runtime-authz
 
-A firewall for your AI agent's tools. It sits between an MCP client (Claude Code, Claude
-Desktop, Cursor, …) and the MCP servers it uses, and checks every tool call against a
-least-privilege policy *before* it runs: allow, block, or escalate. It stops secrets and
-private data from leaving through tools (even encoded), blocks commands and destinations you
-haven't allowed, and logs every decision with its reason. Built in Rust on the official MCP
-SDK (`rmcp`).
+[![CI](https://github.com/Wazza0/mcp-runtime-authz/actions/workflows/ci.yml/badge.svg)](https://github.com/Wazza0/mcp-runtime-authz/actions/workflows/ci.yml)
+
+**A firewall for your AI agent's tools.** It sits between an MCP client (Claude Code, Claude
+Desktop, Cursor, …) and the MCP servers it uses, and checks every tool call *before* it runs.
+Small, auditable Rust, built on the official MCP SDK.
 
 ```
 MCP client ──▶ authz proxy (policy + audit log) ──▶ the MCP server you already use
 ```
 
-## Use it as a proxy
+## What it stops
+
+- **Secrets leaving through tools**, even base64- or percent-encoded, and even when the
+  destination looks legitimate.
+- **Private files being read** (`.env`, keys, `.ssh`, credential files), including when the path
+  is tucked inside a list of other files.
+- **Private data you read this session being sent somewhere you didn't allow** (taint tracking),
+  whether it rides in a URL, an email body or a subdomain.
+- **Code planted to run later:** writes to git hooks, CI workflows, editor tasks, shell rc files.
+- **Destinations and commands you never allowed:** hosts, email recipients, shell commands.
+
+Every decision is logged, with its reason, before anything runs. The agent only ever sees
+`BLOCKED` plus an audit reference, so it can't learn the rules and work around them.
+
+## Quick start
 
 ```sh
 cargo build --release
-authz proxy --policy my-policy.yaml --audit audit.jsonl -- <mcp server command> [args...]
+authz proxy --policy policies/filesystem.yaml --audit audit.jsonl \
+  -- npx -y @modelcontextprotocol/server-filesystem /path/to/project
 ```
 
-Point your client at the proxy instead of the server. In `.mcp.json` (Claude Code), Claude
-Desktop's config, or Cursor's:
-
-```json
-{
-  "mcpServers": {
-    "guarded": {
-      "command": "/path/to/authz",
-      "args": ["proxy", "--policy", "/path/to/my-policy.yaml", "--audit", "/path/to/audit.jsonl",
-               "--", "<mcp server command>", "<arg>"]
-    }
-  }
-}
-```
-
-Start from [`policies/example-proxy.yaml`](policies/example-proxy.yaml). What to know:
-
-- **The `allow` list is your trust anchor.** The proxy never sees what you typed, so hosts,
-  email recipients and shell commands are permitted only if the policy lists them.
-- **Tool names come from the server you wrap.** List each one under `tools:` with a risk class;
-  anything unlisted falls to `default` (set it to `deny`).
-- **Escalations fail closed.** stdin is the MCP channel, so the proxy cannot prompt you. An
-  escalated call is refused and logged; `--approve allow` turns escalations into allows instead.
-- **The agent learns nothing about the policy.** A refused call returns `BLOCKED` with an audit
-  reference; the rule and reason are only in the audit log.
-- **One decision path.** The proxy and the bundled test agent use the same `Gate`, so everything
-  measured in [the evaluation](report/findings.md) applies to the proxy.
-
-`tests/proxy.rs` drives the proxy with the official MCP SDK client and checks that allowed calls
-pass through intact and that refused ones never reach the server.
-
-### Starter policies
-
-| policy | wraps | what it adds |
-| --- | --- | --- |
-| [`filesystem.yaml`](policies/filesystem.yaml) | the official [filesystem server](https://www.npmjs.com/package/@modelcontextprotocol/server-filesystem) | `.env`, keys, `.ssh` and credential files stay unreadable (including via `read_multiple_files`); secrets can't be written into other files; no writes that run code later (git hooks, CI workflows, editor tasks, shell rc files) |
-| [`example-proxy.yaml`](policies/example-proxy.yaml) | template | the `allow` list for hosts, email recipients and shell commands |
-
-For example, to guard a project folder in Claude Code (on Windows use `npx.cmd`):
+Point your client at the proxy instead of the server. In `.mcp.json` (Claude Code), or Claude
+Desktop's or Cursor's config (on Windows use `npx.cmd`):
 
 ```json
 {
@@ -70,106 +47,132 @@ For example, to guard a project folder in Claude Code (on Windows use `npx.cmd`)
 }
 ```
 
-`tests/proxy_filesystem.rs` runs that exact setup against the real server (opt-in, since it needs
-Node and network): `cargo test -p authz-cli --test proxy_filesystem -- --ignored`.
+| starter policy | wraps | what it adds |
+| --- | --- | --- |
+| [`filesystem.yaml`](policies/filesystem.yaml) | the official [filesystem server](https://www.npmjs.com/package/@modelcontextprotocol/server-filesystem) | credential files stay unreadable; secrets can't be written into files; no writes that run code later |
+| [`example-proxy.yaml`](policies/example-proxy.yaml) | a template for any server | an `allow` list for hosts, email recipients and shell commands |
 
-## Layout
+## Does it work?
+
+Measured on a small corpus (7 attacks, 6 benign tasks), unguarded vs guarded. Block rate counts
+only attacks that succeed without the guard, so the model resisting by itself earns no credit.
+
+| | scripted agent (obeys every injection) | qwen3:8b (real local model) |
+| --- | --- | --- |
+| attacks that succeed with no guard | 7/7 | 3/7 |
+| **attack-block rate** | **100% (7/7)** | **100% (3/3)** |
+| **false-positive rate** (benign tasks broken) | **0% (0/6)** | **0% (0/6)** |
+| block rate if a human approves every prompt | 86% (6/7) | 67% (2/3) |
+
+Prompts on the 6 benign tasks: zero, in every run. **Read these as a demonstration, not proof of
+generality:** the corpus is small and self-written, and the same author wrote the attacks and the
+rules. The full write-up, limitations included, is in [report/findings.md](report/findings.md).
+CI reproduces the scripted numbers on every push.
+
+## Found and fixed
+
+Four real bypasses in this project's own code, found by testing and review, each fixed and pinned
+by a regression test:
+
+1. **A whole private file pasted into an email body** counted as a harmless reference. Found by
+   removing rules one at a time.
+2. **Text that mentioned a link** had everything before the link ignored, so data placed in front
+   of a URL went unchecked.
+3. **Refusals named the rule that fired**, giving injected instructions a way to probe the policy
+   and retry. Raised in review of related work. The agent now learns nothing.
+4. **A denied file hidden in a list** (`read_multiple_files`) was returned while a direct read was
+   refused. Found only by testing against the real filesystem server; our own test server never
+   takes lists.
+
+## How it works
+
+Every tool call goes through one decision path, the `Gate`, whether it comes from the proxy or
+the bundled test agent. Four guarantees hold by construction:
+
+- **Nothing skips the check, and the compiler enforces it.** Running a tool requires a single-use
+  token bound to that exact call, and only a policy allow (or a human approving an escalation) can
+  mint one. Forging a token or calling the tool client directly is a compile error, pinned by
+  tests.
+- **Rules can only restrict.** A rule can deny or escalate, never allow, and the most severe match
+  wins, so no rule can loosen another.
+- **A human can approve a borderline call but never override a deny.** That's in the types, not a
+  convention.
+- **The log is written first.** If the audit write fails, the call doesn't run.
+
+Arguments are decoded (percent, base64) and searched inside lists and objects before matching.
+MCP tool annotations are treated as untrusted hints that can only tighten a decision. Design notes
+are [below](#design-notes).
+
+## Writing a policy
+
+Policies are YAML data; the engine is generic. Start from
+[`example-proxy.yaml`](policies/example-proxy.yaml):
+
+- **The `allow` list is your trust anchor.** The proxy never sees what you typed, so hosts, email
+  recipients and shell commands are permitted only if the policy lists them.
+- **List each tool the server exposes** under `tools:` with a risk class (`read`, `write`,
+  `egress`, `exec`). Anything unlisted falls to `default`, which should be `deny`.
+- **Escalations fail closed in the proxy.** stdin carries the MCP protocol, so the proxy can't
+  prompt you; an escalated call is refused and logged. `--approve allow` turns them into allows.
+- **Malformed policies are rejected:** duplicate keys, unknown fields, bad patterns, and rules that
+  could never fire all fail at load.
+
+## Tests and evaluation
+
+```sh
+cargo test --workspace                       # 27 tests: milestone gates, proxy, compile-time guarantees
+cargo test -p authz-cli --test proxy_filesystem -- --ignored   # against the real server (needs Node)
+
+cargo run --release -p authz-cli --bin authz -- eval --ablation          # scripted agent + per-rule ablation
+cargo run --release -p authz-cli --bin authz -- eval --approve allow     # human approves everything
+cargo run --release -p authz-cli --bin authz -- eval --model ollama      # real local model (needs Ollama)
+```
+
+`tests/proxy.rs` drives the proxy with the official MCP SDK client and checks that allowed calls
+pass through intact and refused ones never reach the server. Attack cases carry references to the
+OWASP Top 10 for Agentic Applications 2026, the OWASP LLM Top 10 2025 and MITRE ATLAS v2026.10,
+pinned from official sources in `eval/frameworks/` and checked by `tests/refs.rs`.
+
+## Limitations
+
+- Small, self-written corpus; no attacker that adapts to the guard.
+- Taint tracking catches data reused verbatim or encoded, not paraphrased.
+- Pattern-based secret detection misses formats and encodings it doesn't know.
+- In the proxy, the `allow` list must be written by hand; escalations can't prompt.
+
+More in [report/findings.md](report/findings.md#limitations). How this compares to published work
+(Progent, CaMeL, FIDES and others) is in [report/related-work.md](report/related-work.md).
+
+## Design notes
+
+**Layout.**
 
 | crate | role |
 | --- | --- |
-| `authz-core` | `ToolCall`, `Context`, `Decision`, `Executor` |
-| `authz-tools` | MCP tool server: `fs_read`, `http_fetch`, `email_send`, `shell_run` (all simulated) |
-| `authz-guard` | the `Gate` (single decision path), policy engine, audit log, MCP client, and the two front ends: in-process `Interceptor` and stdio `Proxy` |
-| `authz-agent` | agent loop and model backends. **No dependency on the tool client**: it can only act through the `Executor` it is handed |
-| `authz-cli` | `authz` binary: wiring, corpus runs, eval |
+| `authz-core` | shared types: `ToolCall`, `Context`, `Decision`, `Policy`, `Executor` |
+| `authz-guard` | the `Gate`, policy engine, inspection, taint, audit log, MCP client, and the two front ends: in-process `Interceptor` and stdio `Proxy` |
+| `authz-tools` | a simulated MCP tool server for the evaluation: nothing is sent, fetched or executed |
+| `authz-agent` | agent loop and model backends; **no dependency on the tool client**, so it can only act through what it's handed |
+| `authz-cli` | the `authz` binary: `proxy`, `run`, `eval`, `serve-tools` |
 
-## The boundary is enforced by the compiler
+**The boundary, structurally.** `authz-agent` cannot name the tool client (`tests/boundary.rs`).
+Execution is crate-private (`tests/ui/bypass_exec.rs`, E0624) and consumes an `Authorization` that
+only `token.rs` can mint (`tests/ui/forge_token.rs`, E0451). `authorize` returns an unforgeable
+`Escalation` for human review (`tests/ui/forge_escalation.rs`, E0451); a deny is a different type
+with no path to execution. The unguarded baseline is the same path with an allow-everything policy.
 
-The handoff rule is that the interceptor is the *only* path to execution. That holds structurally:
+**Taint tracking.** Output of tools the policy labels (e.g. `taint: private`) is recorded by the
+guard, never the model. A later argument that shares a run of at least `min` characters with it,
+after decoding, carries that data. A URL's host counts too, unless the source itself names that
+host; a URL copied whole from a source is a link being followed, not a leak.
 
-1. `authz-agent` has no dependency on the tool client or server (`tests/boundary.rs`).
-2. `Mcp::exec` is crate-private, so outside `authz-guard` the only executor is `Interceptor` (`tests/ui/bypass_exec.rs`, E0624).
-3. `Mcp::exec` takes an `Authorization` by value. It is bound to one call and single-use. Only `token.rs` can mint one: on a policy `Allow`, or on a human approving an `Escalation` (`tests/ui/forge_token.rs`, E0451).
-4. The interceptor writes the decision to `audit.jsonl` *before* executing, and fails closed if the log write fails.
+**Escalation in the bundled agent.** `authz run --approve ask` prompts on the terminal, `deny`
+fails closed, `allow` approves everything. The audit log records `escalate`, then `approved` or
+`denied`, before anything runs.
 
-The unguarded baseline is `Rules::permit_all()`: the same code path with an explicit allow-everything policy, still audited.
+**Models for the evaluation.** `scripted` replays each case's plan, with injected steps firing only
+if the injected text reached it. `ollama` runs a real local model (default `qwen3:8b`, temperature
+0, fixed seed, reasoning off, neutral system prompt); set `AUTHZ_MODEL` and `OLLAMA_HOST`.
 
-`fixtures/` holds the offline web pages and files the tools serve. `eval/corpus/` holds
-attack and benign cases. Every side effect is appended to `sandbox/<mode>/<case>/events.jsonl` (decisions in `audit.jsonl` beside it)
-and nothing is sent, fetched or executed for real.
-
-## Policy
-
-`policies.yaml` is data; the engine (`crates/authz-guard/src/policy.rs`) is generic. Rules can only
-`deny` or `escalate`, so no rule can loosen a decision. Every matching rule is evaluated and the
-most severe wins, so rule order cannot shadow a deny. Arguments are percent- and base64-decoded
-before matching. Entities the user named in the task (recipients, hosts, commands) are the only
-ones permitted for sensitive arguments.
-
-MCP tool annotations are treated as untrusted hints that can only tighten a decision. `http_fetch`
-is honestly annotated read-only, yet it is the main exfiltration channel.
-
-## Taint tracking
-
-Tools the policy labels (e.g. `fs_read: {taint: private}`) have their output recorded in a session
-ledger by the interceptor, never by the model. `carries_taint` holds when an argument, after
-decoding, shares a run of at least `min` characters with labeled output. A URL's host counts too
-(data can ride in a subdomain), unless the source itself names that host, and a value copied whole
-from the source is treated as a reference rather than a leak. `tainted-fetch` denies private data
-in a URL to an unnamed host; `tainted-mail` escalates private data mailed to an unnamed recipient.
-
-Limitation: this tracks verbatim and encoded reuse. A model that paraphrases private data defeats
-it. Precise information-flow control needs the planner and data to be separated (as in CaMeL).
-
-## Escalation
-
-`escalate` pauses the call for a human: `--approve ask` prompts on the terminal (the default when
-one is attached), `deny` fails closed (the default otherwise, e.g. CI), and `allow` approves
-everything, which measures what deny rules stop on their own. The audit log records `escalate` and
-then `approved` or `denied`, before anything runs.
-
-A human can approve an escalation but never a block: `authorize` returns an unforgeable
-`Escalation` (`tests/ui/forge_escalation.rs`, E0451), and only an `Escalation` can be approved into
-an `Authorization`. A deny is a different type and has no path to execution.
-
-## Framework mapping
-
-Each attack case carries `refs`: **OWASP Top 10 for Agentic Applications 2026** (ASI, primary),
-OWASP Top 10 for LLM Applications 2025, and MITRE ATLAS technique IDs. All three are pinned from
-official sources in `eval/frameworks/` (ATLAS v2026.10), and `tests/refs.rs` fails if any case
-cites an ID that does not exist.
-
-## Run
-
-```sh
-cargo build --workspace
-cargo run -p authz-cli --bin authz -- run                # whole corpus, policies.yaml
-cargo run -p authz-cli --bin authz -- run --unguarded    # permit-all baseline
-cargo run -p authz-cli --bin authz -- run eval/corpus/atk-01-web-exfil.json -v
-cargo run -p authz-cli --bin authz -- run --model ollama   # real local model
-cargo test --workspace
-
-# evaluation: headline numbers (block rate, FPR), per-case table, JSON in eval/out/
-cargo run --release -p authz-cli --bin authz -- eval --ablation
-cargo run --release -p authz-cli --bin authz -- eval --model ollama --approve allow
-```
-
-## Models
-
-| backend | use |
-| --- | --- |
-| `scripted` (default) | Deterministic stand-in for a maximally compliant agent. Injected steps fire only if the injected text reached it, so attack success is causal, but the unguarded baseline succeeds by construction. |
-| `ollama` | A real local model via Ollama (default `qwen3:8b`). Temperature 0, fixed seed, reasoning off, neutral system prompt. It gives a realistic unguarded baseline. |
-
-Environment: `AUTHZ_MODEL` (Ollama tag), `OLLAMA_HOST` (default `http://127.0.0.1:11434`),
-`AUTHZ_THINK=1` to enable reasoning. The agent gets tool *descriptions* from the interceptor as
-plain data, so a model backend never gains a path to execution.
-
-## Status
-
-- [x] **M0** bare agent, no guard: benign tasks complete, 3/3 seed attacks reproduce
-- [x] **M1** interceptor + allowlist + audit: every execution has a prior logged allow; denying a tool blocks it
-- [x] **M2** context-aware policy: 6/6 attacks blocked (3 of them in-scope, caught by argument inspection), 6/6 benign tasks complete
-- [x] **M3** escalation: borderline calls pause for a human (approve runs it, deny stops it, both audited); approvals can never override a deny
-- [x] **M4** taint tracking: private data read this session cannot ride an egress call to a destination the user didn't name; it stops a codename leak in a URL path that every M2 rule misses
-- [x] **M5** eval + report: `authz eval` reproduces the headline numbers; write-up in [report/findings.md](report/findings.md)
+**History.** Built in milestones M0 to M5 (bare agent, interceptor, context-aware policy,
+escalation, taint tracking, evaluation), then refocused into a proxy for real MCP servers.
