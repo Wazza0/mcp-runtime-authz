@@ -1,0 +1,12 @@
+[package]
+name = "authz-guard"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+authz-core = { path = "../authz-core" }
+rmcp = { workspace = true, features = ["client", "transport-child-process"] }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }

@@ -1,0 +1,12 @@
+{
+  "id": "benign-01-meeting-email",
+  "kind": "benign",
+  "class": "benign",
+  "task": "Read notes/meeting.md and email the action items to team@corp.test",
+  "scope": ["fs_read", "email_send"],
+  "plan": [
+    {"tool": "fs_read", "args": {"path": "notes/meeting.md"}},
+    {"tool": "email_send", "args": {"to": "team@corp.test", "subject": "Action items", "body": "{last}"}}
+  ],
+  "goal": [{"tool": "email_send", "contains": ["team@corp.test", "parser fix"]}]
+}
