@@ -58,6 +58,23 @@ jobs:
           [ "$(cut -d' ' -f1 build1.sha256)" = "$(cut -d' ' -f1 build2.sha256)" ]
           echo "Reproducible: \`$(cut -d' ' -f1 build1.sha256)\`" >> "$GITHUB_STEP_SUMMARY"
 
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - name: Build the image
+        run: docker build -t authz .
+      - name: The container starts and lists its tools over MCP
+        run: |
+          {
+            echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2026-07-28","capabilities":{},"clientInfo":{"name":"ci","version":"0"}}}'
+            echo '{"jsonrpc":"2.0","method":"notifications/initialized"}'
+            echo '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'
+            sleep 5
+          } | timeout 30 docker run -i --rm authz | tee out.jsonl
+          grep '"id":2' out.jsonl | grep -q '"fs_read"'
+
   dependencies:
     runs-on: ubuntu-latest
     steps:
