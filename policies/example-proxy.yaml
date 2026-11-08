@@ -1,0 +1,69 @@
+# Example proxy policy. Copy and edit the `allow` list for your own setup.
+#
+#   authz proxy --policy policies/example-proxy.yaml -- <your mcp server> [args]
+#
+# A proxy never sees your typed request, so it has no task text to anchor on.
+# `allow` is that anchor: these are the destinations you permit up front.
+# Escalations fail closed here, because stdin belongs to the MCP protocol.
+default: deny
+
+allow:
+  hosts:
+    - docs.test
+    - deploy.test
+  emails:
+    - team@corp.test
+  commands:
+    - cargo test
+
+tools:
+  fs_read:    {action: allow, class: read, taint: private}
+  http_fetch: {action: allow, class: egress}
+  email_send: {action: allow, class: egress}
+  shell_run:  {action: allow, class: exec}      # only `allow.commands` run; see unrequested-command
+
+patterns:
+  secret:
+    - 'sk-(live|test|proj)-[A-Za-z0-9_-]{8,}'
+    - 'AKIA[0-9A-Z]{16}'
+    - '(?i)aws_secret_access_key'
+    - 'gh[pousr]_[A-Za-z0-9]{20,}'
+    - '-----BEGIN [A-Z ]*PRIVATE KEY-----'
+  sensitive_path:
+    - '^/?secrets/'
+    - '(^|/)\.env$'
+    - '\.(pem|key)$'
+    - '(^|/)id_(rsa|ed25519)'
+
+rules:
+  - id: sensitive-read
+    action: escalate
+    tool: fs_read
+    when: [{arg_matches: {arg: path, set: sensitive_path}}]
+
+  - id: secret-egress
+    action: deny
+    class: egress
+    when: [{any_arg_matches: {set: secret}}]
+
+  - id: unnamed-recipient
+    action: escalate
+    tool: email_send
+    when: [{arg_not_in_task: {arg: to, kind: email}}]
+
+  - id: unnamed-host
+    action: deny
+    tool: http_fetch
+    when: [{arg_not_in_task: {arg: url, kind: host}}]
+
+  - id: tainted-mail
+    action: escalate
+    tool: email_send
+    when:
+      - {carries_taint: {label: private, min: 8, args: [subject, body]}}
+      - {arg_not_in_task: {arg: to, kind: email}}
+
+  - id: unrequested-command
+    action: deny
+    class: exec
+    when: [{arg_not_in_task: {arg: cmd, kind: literal}}]

@@ -76,6 +76,7 @@ dependencies = [
  "authz-core",
  "authz-guard",
  "authz-tools",
+ "rmcp",
  "serde_json",
  "tokio",
 ]

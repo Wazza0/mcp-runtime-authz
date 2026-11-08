@@ -1,8 +1,53 @@
 # mcp-runtime-authz
 
-Runtime authorization layer between an LLM agent and its MCP tools: every proposed
-tool call is checked against least-privilege policy *before* it runs
-(allow / block / escalate). Built in Rust on the official MCP SDK (`rmcp`).
+A firewall for your AI agent's tools. It sits between an MCP client (Claude Code, Claude
+Desktop, Cursor, …) and the MCP servers it uses, and checks every tool call against a
+least-privilege policy *before* it runs: allow, block, or escalate. It stops secrets and
+private data from leaving through tools (even encoded), blocks commands and destinations you
+haven't allowed, and logs every decision with its reason. Built in Rust on the official MCP
+SDK (`rmcp`).
+
+```
+MCP client ──▶ authz proxy (policy + audit log) ──▶ the MCP server you already use
+```
+
+## Use it as a proxy
+
+```sh
+cargo build --release
+authz proxy --policy my-policy.yaml --audit audit.jsonl -- <mcp server command> [args...]
+```
+
+Point your client at the proxy instead of the server. In `.mcp.json` (Claude Code), Claude
+Desktop's config, or Cursor's:
+
+```json
+{
+  "mcpServers": {
+    "guarded": {
+      "command": "/path/to/authz",
+      "args": ["proxy", "--policy", "/path/to/my-policy.yaml", "--audit", "/path/to/audit.jsonl",
+               "--", "<mcp server command>", "<arg>"]
+    }
+  }
+}
+```
+
+Start from [`policies/example-proxy.yaml`](policies/example-proxy.yaml). What to know:
+
+- **The `allow` list is your trust anchor.** The proxy never sees what you typed, so hosts,
+  email recipients and shell commands are permitted only if the policy lists them.
+- **Tool names come from the server you wrap.** List each one under `tools:` with a risk class;
+  anything unlisted falls to `default` (set it to `deny`).
+- **Escalations fail closed.** stdin is the MCP channel, so the proxy cannot prompt you. An
+  escalated call is refused and logged; `--approve allow` turns escalations into allows instead.
+- **The agent learns nothing about the policy.** A refused call returns `BLOCKED` with an audit
+  reference; the rule and reason are only in the audit log.
+- **One decision path.** The proxy and the bundled test agent use the same `Gate`, so everything
+  measured in [the evaluation](report/findings.md) applies to the proxy.
+
+`tests/proxy.rs` drives the proxy with the official MCP SDK client and checks that allowed calls
+pass through intact and that refused ones never reach the server.
 
 ## Layout
 
@@ -10,7 +55,7 @@ tool call is checked against least-privilege policy *before* it runs
 | --- | --- |
 | `authz-core` | `ToolCall`, `Context`, `Decision`, `Executor` |
 | `authz-tools` | MCP tool server: `fs_read`, `http_fetch`, `email_send`, `shell_run` (all simulated) |
-| `authz-guard` | MCP client, interceptor, policy engine, audit log |
+| `authz-guard` | the `Gate` (single decision path), policy engine, audit log, MCP client, and the two front ends: in-process `Interceptor` and stdio `Proxy` |
 | `authz-agent` | agent loop and model backends. **No dependency on the tool client**: it can only act through the `Executor` it is handed |
 | `authz-cli` | `authz` binary: wiring, corpus runs, eval |
 

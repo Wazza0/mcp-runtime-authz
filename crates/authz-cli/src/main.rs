@@ -8,9 +8,12 @@ use std::{
 use anyhow::{Context, Result, bail};
 use authz_agent::Kind;
 use authz_cli::{Brain, Rig, eval::evaluate, label, load, run_case};
-use authz_guard::{AllowAll, Console, DenyAll, Rules};
+use authz_core::Context as Ctx;
+use authz_guard::{AllowAll, Approver, Audit, Console, DenyAll, Mcp, Proxy, Rules};
 
-const USAGE: &str = "usage: authz run [case.json|dir] [-v] [--policy <file> | --unguarded] \
+const USAGE: &str = "usage: authz proxy --policy <file> [--audit <file>] [--approve deny|allow] \
+-- <mcp-server-command> [args...]
+       authz run [case.json|dir] [-v] [--policy <file> | --unguarded] \
 [--model scripted|ollama] [--approve deny|allow|ask]
        authz eval [--model scripted|ollama] [--approve deny|allow] [--policy <file>] [--ablation] [--out <file>]
        authz serve-tools";
@@ -44,6 +47,31 @@ async fn main() -> Result<()> {
     let target = || a.get(1).filter(|x| !x.starts_with('-')).map(PathBuf::from);
     match a.first().map(String::as_str) {
         Some("serve-tools") => authz_tools::serve().await,
+        Some("proxy") => {
+            // Everything after `--` is the downstream server's own command line.
+            let split = a.iter().position(|x| x == "--");
+            let (opts, cmd) = match split {
+                Some(i) if a.len() > i + 1 => (&a[..i], &a[i + 1..]),
+                _ => bail!("proxy needs a downstream server after `--`\n{USAGE}"),
+            };
+            let p = flag(opts, "--policy").map(PathBuf::from).context("proxy needs --policy")?;
+            let rules = Rules::load(&p).context("loading policy")?;
+            // stdin is the MCP channel here, so a console prompt cannot run.
+            let approver: Arc<dyn Approver> = match flag(opts, "--approve").unwrap_or("deny") {
+                "deny" => Arc::new(DenyAll),
+                "allow" => Arc::new(AllowAll),
+                m => bail!("proxy supports --approve deny|allow, not {m} (stdin is the protocol)"),
+            };
+            let audit = flag(opts, "--audit")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| PathBuf::from("authz-audit.jsonl"));
+            let down = Mcp::connect(&cmd[0], &cmd[1..], &[]).await?;
+            // No task text in proxy mode: the policy's `allow` list is the trust anchor.
+            let ctx = Ctx::new("", rules.tool_names());
+            // stderr only; stdout belongs to the protocol.
+            eprintln!("authz proxy: {} -> {}", p.display(), cmd.join(" "));
+            Proxy::new(down, Box::new(rules), approver, Audit::open(&audit)?, ctx).await?.run().await
+        }
         Some("eval") => {
             let mut rig = Rig::from_env()?;
             let model = pick_model(&a, &mut rig)?;

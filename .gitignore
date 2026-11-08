@@ -5,3 +5,4 @@ eval/out/
 sandbox/
 .claude/worktrees/
 .cargo/config.toml
+authz-audit.jsonl

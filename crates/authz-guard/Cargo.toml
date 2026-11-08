@@ -5,7 +5,7 @@ edition.workspace = true
 
 [dependencies]
 authz-core = { path = "../authz-core" }
-rmcp = { workspace = true, features = ["client", "transport-child-process"] }
+rmcp = { workspace = true, features = ["client", "server", "transport-child-process", "transport-io"] }
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

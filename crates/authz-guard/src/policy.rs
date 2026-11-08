@@ -99,10 +99,36 @@ pub struct Rule {
     pub when: Vec<Cond>,
 }
 
+/// Destinations the policy permits outright, in addition to anything the user's task
+/// names. A proxy never sees the task, so this is how it gets a trust anchor.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Allowed {
+    #[serde(default)]
+    pub hosts: Vec<String>,
+    #[serde(default)]
+    pub emails: Vec<String>,
+    #[serde(default)]
+    pub commands: Vec<String>,
+}
+
+impl Allowed {
+    fn normalized(mut self) -> Self {
+        for v in [&mut self.hosts, &mut self.emails] {
+            for x in v.iter_mut() {
+                *x = x.to_lowercase();
+            }
+        }
+        self
+    }
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Spec {
     default: Action,
+    #[serde(default)]
+    allow: Allowed,
     #[serde(default)]
     tools: BTreeMap<String, ToolDef>,
     #[serde(default)]
@@ -114,6 +140,7 @@ struct Spec {
 #[derive(Debug, Clone)]
 pub struct Rules {
     default: Action,
+    allow: Allowed,
     tools: BTreeMap<String, ToolDef>,
     patterns: BTreeMap<String, Vec<Regex>>,
     rules: Vec<Rule>,
@@ -171,13 +198,20 @@ impl Rules {
                 }
             }
         }
-        Ok(Self { default: spec.default, tools: spec.tools, patterns, rules: spec.rules })
+        Ok(Self {
+            default: spec.default,
+            allow: spec.allow.normalized(),
+            tools: spec.tools,
+            patterns,
+            rules: spec.rules,
+        })
     }
 
     /// Explicit no-restriction baseline. Same code path, every call still audited.
     pub fn permit_all() -> Self {
         Self {
             default: Action::Allow,
+            allow: Allowed::default(),
             tools: BTreeMap::new(),
             patterns: BTreeMap::new(),
             rules: Vec::new(),
@@ -189,6 +223,12 @@ impl Rules {
         let mut r = self.clone();
         r.rules.retain(|x| !ids.contains(&x.id.as_str()));
         r
+    }
+
+    /// Tools the policy knows about. In proxy mode this is the session scope,
+    /// since there is no task text to derive one from.
+    pub fn tool_names(&self) -> Vec<String> {
+        self.tools.keys().cloned().collect()
     }
 
     pub fn rule_ids(&self) -> Vec<&str> {
@@ -214,17 +254,23 @@ impl Rules {
                 .iter()
                 .find(|(_, v)| v.as_str().is_some_and(|s| self.matches(s, set)))
                 .map(|(k, _)| format!("{tool}.{k} carries {set} data")),
+            // Permitted = named in the user's task, or on the policy's allow list.
             Cond::ArgNotInTask { arg, kind } => {
                 let v = call.arg(arg);
-                let unnamed = |named: Vec<String>, got: Vec<String>| {
+                let unnamed = |mut named: Vec<String>, extra: &[String], got: Vec<String>| {
+                    named.extend(extra.iter().cloned());
                     got.is_empty() || got.iter().any(|x| !named.contains(x))
                 };
                 let missing = match kind {
-                    Kind::Email => unnamed(emails(&ctx.task), emails(v)),
-                    Kind::Host => unnamed(hosts(&ctx.task), hosts(v)),
-                    Kind::Literal => v.trim().is_empty() || !ctx.task.contains(v.trim()),
+                    Kind::Email => unnamed(emails(&ctx.task), &self.allow.emails, emails(v)),
+                    Kind::Host => unnamed(hosts(&ctx.task), &self.allow.hosts, hosts(v)),
+                    Kind::Literal => {
+                        let t = v.trim();
+                        t.is_empty()
+                            || !(ctx.task.contains(t) || self.allow.commands.iter().any(|c| c == t))
+                    }
                 };
-                missing.then(|| format!("{tool}.{arg} {v:?} is not named in the task"))
+                missing.then(|| format!("{tool}.{arg} {v:?} is not a permitted destination"))
             }
             Cond::QueryLonger { arg, len } => {
                 let n = query_len(call.arg(arg));
@@ -398,6 +444,20 @@ mod tests {
         // A server saying a read tool is destructive is believed.
         c.tools.insert("fs_read".into(), Hints { read_only: false, destructive: true, open_world: false });
         assert_eq!(r.decide(&call("fs_read", json!({"path": "notes/a.md"})), &c).rule(), "hint-disagrees");
+    }
+
+    #[test]
+    fn allow_list_stands_in_for_the_task() {
+        let y = "default: deny\nallow: {hosts: [Docs.TEST], emails: [Me@Corp.test]}\n\
+                 tools: {http_fetch: {action: allow, class: egress}, email_send: {action: allow, class: egress}}\n\
+                 rules:\n  - {id: h, action: deny, tool: http_fetch, when: [{arg_not_in_task: {arg: url, kind: host}}]}\n  \
+                 - {id: e, action: deny, tool: email_send, when: [{arg_not_in_task: {arg: to, kind: email}}]}\n";
+        let r = Rules::parse(y).unwrap();
+        let none = Context::default();
+        assert!(r.decide(&call("http_fetch", json!({"url": "http://docs.test/x"})), &none).allowed());
+        assert_eq!(r.decide(&call("http_fetch", json!({"url": "http://evil.test/x"})), &none).rule(), "h");
+        assert!(r.decide(&call("email_send", json!({"to": "me@corp.test"})), &none).allowed());
+        assert_eq!(r.decide(&call("email_send", json!({"to": "me@corp.test, x@evil.test"})), &none).rule(), "e");
     }
 
     #[test]
