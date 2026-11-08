@@ -14,6 +14,7 @@ use anyhow::{Context as _, Result, bail};
 use authz_core::{Context, Decision, Policy, ToolCall};
 use regex::Regex;
 use serde::Deserialize;
+use serde_json::Value;
 
 use crate::inspect::{emails, hosts, query_len, shared, variants};
 
@@ -37,6 +38,8 @@ pub enum Restrict {
 #[serde(rename_all = "snake_case")]
 pub enum Class {
     Read,
+    /// Changes local state: write, edit, move, create.
+    Write,
     Egress,
     Exec,
 }
@@ -146,6 +149,22 @@ pub struct Rules {
     rules: Vec<Rule>,
 }
 
+/// Every string inside a JSON value. Arrays and objects are searched too: real servers
+/// take paths as arrays (`read_multiple_files`) and edits as objects (`edit_file`), and a
+/// string-only check let `read_multiple_files` read a denied file.
+fn strings(v: &Value) -> Vec<&str> {
+    match v {
+        Value::String(s) => vec![s.as_str()],
+        Value::Array(a) => a.iter().flat_map(strings).collect(),
+        Value::Object(o) => o.values().flat_map(strings).collect(),
+        _ => Vec::new(),
+    }
+}
+
+fn arg_strings<'a>(call: &'a ToolCall, arg: &str) -> Vec<&'a str> {
+    call.args.get(arg).map(strings).unwrap_or_default()
+}
+
 fn verdict(a: Action, rule: &str, why: String) -> Decision {
     match a {
         Action::Allow => Decision::Allow,
@@ -246,28 +265,35 @@ impl Rules {
         match c {
             Cond::NotInScope => (!ctx.scope.contains(tool))
                 .then(|| format!("{tool} is outside the task scope {:?}", ctx.scope)),
-            Cond::ArgMatches { arg, set } => {
-                self.matches(call.arg(arg), set).then(|| format!("{tool}.{arg} matches {set}"))
-            }
+            Cond::ArgMatches { arg, set } => arg_strings(call, arg)
+                .into_iter()
+                .any(|s| self.matches(s, set))
+                .then(|| format!("{tool}.{arg} matches {set}")),
             Cond::AnyArgMatches { set } => call
                 .args
                 .iter()
-                .find(|(_, v)| v.as_str().is_some_and(|s| self.matches(s, set)))
+                .find(|(_, v)| strings(v).into_iter().any(|s| self.matches(s, set)))
                 .map(|(k, _)| format!("{tool}.{k} carries {set} data")),
             // Permitted = named in the user's task, or on the policy's allow list.
             Cond::ArgNotInTask { arg, kind } => {
-                let v = call.arg(arg);
+                let vals = arg_strings(call, arg);
+                let v = vals.join(" ");
                 let unnamed = |mut named: Vec<String>, extra: &[String], got: Vec<String>| {
                     named.extend(extra.iter().cloned());
                     got.is_empty() || got.iter().any(|x| !named.contains(x))
                 };
                 let missing = match kind {
-                    Kind::Email => unnamed(emails(&ctx.task), &self.allow.emails, emails(v)),
-                    Kind::Host => unnamed(hosts(&ctx.task), &self.allow.hosts, hosts(v)),
+                    Kind::Email => unnamed(emails(&ctx.task), &self.allow.emails, emails(&v)),
+                    Kind::Host => unnamed(hosts(&ctx.task), &self.allow.hosts, hosts(&v)),
+                    // Every element of a list must be permitted on its own.
                     Kind::Literal => {
-                        let t = v.trim();
-                        t.is_empty()
-                            || !(ctx.task.contains(t) || self.allow.commands.iter().any(|c| c == t))
+                        vals.is_empty()
+                            || vals.iter().any(|x| {
+                                let t = x.trim();
+                                t.is_empty()
+                                    || !(ctx.task.contains(t)
+                                        || self.allow.commands.iter().any(|c| c == t))
+                            })
                     }
                 };
                 missing.then(|| format!("{tool}.{arg} {v:?} is not a permitted destination"))
@@ -289,7 +315,7 @@ impl Rules {
                 call.args
                     .iter()
                     .filter(|(k, _)| args.is_empty() || args.contains(k))
-                    .filter_map(|(k, v)| Some((k, v.as_str()?)))
+                    .flat_map(|(k, v)| strings(v).into_iter().map(move |s| (k, s)))
                     .find_map(|(k, v)| {
                         ctx.taint.iter().filter(|t| t.label == *label).find_map(|t| {
                             let frag = shared(v, &t.text, *min)?;
@@ -444,6 +470,35 @@ mod tests {
         // A server saying a read tool is destructive is believed.
         c.tools.insert("fs_read".into(), Hints { read_only: false, destructive: true, open_world: false });
         assert_eq!(r.decide(&call("fs_read", json!({"path": "notes/a.md"})), &c).rule(), "hint-disagrees");
+    }
+
+    fn filesystem() -> Rules {
+        Rules::load(&Path::new(env!("CARGO_MANIFEST_DIR")).join("../../policies/filesystem.yaml"))
+            .unwrap()
+    }
+
+    // Regressions found by running the proxy in front of the official filesystem server.
+    #[test]
+    fn rules_look_inside_arrays_and_objects() {
+        let r = filesystem();
+        let none = Context::default();
+        let d = r.decide(&call("read_multiple_files", json!({"paths": ["a.md", "C:/p/.env"]})), &none);
+        assert_eq!(d.rule(), "sensitive-read", "a denied path hidden in an array: {d:?}");
+        let edit = json!({"path": "app.cfg", "edits": [{"oldText": "x", "newText": "sk-live-FAKE0000demo0000key"}]});
+        assert_eq!(r.decide(&call("edit_file", edit), &none).rule(), "secret-write", "secret nested in an object");
+        let mv = json!({"source": "tmp/hook", "destination": "repo/.git/hooks/pre-commit"});
+        assert_eq!(r.decide(&call("move_file", mv), &none).rule(), "runs-later-write", "moving code into place");
+        assert!(r.decide(&call("read_multiple_files", json!({"paths": ["a.md", "b.md"]})), &none).allowed());
+    }
+
+    #[test]
+    fn every_listed_command_must_be_permitted() {
+        let y = "default: deny\nallow: {commands: [ls]}\ntools: {run: {action: allow, class: exec}}\n\
+                 rules: [{id: c, action: deny, class: exec, when: [{arg_not_in_task: {arg: cmd, kind: literal}}]}]\n";
+        let r = Rules::parse(y).unwrap();
+        let none = Context::default();
+        assert!(r.decide(&call("run", json!({"cmd": ["ls"]})), &none).allowed());
+        assert_eq!(r.decide(&call("run", json!({"cmd": ["ls", "rm -rf /"]})), &none).rule(), "c");
     }
 
     #[test]

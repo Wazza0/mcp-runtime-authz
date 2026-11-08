@@ -49,6 +49,30 @@ Start from [`policies/example-proxy.yaml`](policies/example-proxy.yaml). What to
 `tests/proxy.rs` drives the proxy with the official MCP SDK client and checks that allowed calls
 pass through intact and that refused ones never reach the server.
 
+### Starter policies
+
+| policy | wraps | what it adds |
+| --- | --- | --- |
+| [`filesystem.yaml`](policies/filesystem.yaml) | the official [filesystem server](https://www.npmjs.com/package/@modelcontextprotocol/server-filesystem) | `.env`, keys, `.ssh` and credential files stay unreadable (including via `read_multiple_files`); secrets can't be written into other files; no writes that run code later (git hooks, CI workflows, editor tasks, shell rc files) |
+| [`example-proxy.yaml`](policies/example-proxy.yaml) | template | the `allow` list for hosts, email recipients and shell commands |
+
+For example, to guard a project folder in Claude Code (on Windows use `npx.cmd`):
+
+```json
+{
+  "mcpServers": {
+    "files": {
+      "command": "/path/to/authz",
+      "args": ["proxy", "--policy", "/path/to/policies/filesystem.yaml", "--audit", "/path/to/audit.jsonl",
+               "--", "npx", "-y", "@modelcontextprotocol/server-filesystem", "/path/to/project"]
+    }
+  }
+}
+```
+
+`tests/proxy_filesystem.rs` runs that exact setup against the real server (opt-in, since it needs
+Node and network): `cargo test -p authz-cli --test proxy_filesystem -- --ignored`.
+
 ## Layout
 
 | crate | role |

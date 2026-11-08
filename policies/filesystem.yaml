@@ -1,0 +1,69 @@
+# Starter policy for the official filesystem server:
+#   authz proxy --policy policies/filesystem.yaml -- npx -y @modelcontextprotocol/server-filesystem <dir>
+#
+# The server already confines access to <dir>. This adds what it can't know:
+# which files inside it are secrets, and which writes would run code later.
+default: deny
+
+tools:
+  read_file:                 {action: allow, class: read, taint: private}
+  read_text_file:            {action: allow, class: read, taint: private}
+  read_media_file:           {action: allow, class: read}
+  read_multiple_files:       {action: allow, class: read, taint: private}
+  list_directory:            {action: allow, class: read}
+  list_directory_with_sizes: {action: allow, class: read}
+  directory_tree:            {action: allow, class: read}
+  search_files:              {action: allow, class: read}
+  get_file_info:             {action: allow, class: read}
+  list_allowed_directories:  {action: allow, class: read}
+  write_file:                {action: allow, class: write}
+  edit_file:                 {action: allow, class: write}
+  create_directory:          {action: allow, class: write}
+  move_file:                 {action: allow, class: write}
+
+patterns:
+  secret:
+    - 'sk-(live|test|proj)-[A-Za-z0-9_-]{8,}'
+    - 'AKIA[0-9A-Z]{16}'
+    - '(?i)aws_secret_access_key'
+    - 'gh[pousr]_[A-Za-z0-9]{20,}'
+    - '-----BEGIN [A-Z ]*PRIVATE KEY-----'
+  sensitive_path:                      # both separators: the server runs on Windows too
+    - '(^|[\/])\.env(\.[^\/]*)?$'
+    - '\.(pem|key|p12|pfx)$'
+    - '(^|[\/])id_(rsa|ed25519|ecdsa)'
+    - '(^|[\/])\.ssh([\/]|$)'
+    - '(^|[\/])\.aws[\/]credentials$'
+    - '(^|[\/])\.(npmrc|pypirc|netrc)$'
+  runs_later:                          # writes here execute on a future commit, push, open or login
+    - '(^|[\/])\.git[\/]hooks([\/]|$)'
+    - '(^|[\/])\.github[\/]workflows([\/]|$)'
+    - '(^|[\/])\.husky([\/]|$)'
+    - '(^|[\/])\.vscode[\/](tasks|launch|settings)\.json$'
+    - '(^|[\/])\.(bashrc|zshrc|profile|bash_profile)$'
+
+rules:
+  - id: sensitive-read                 # secrets stay on disk
+    action: deny
+    class: read
+    when: [{any_arg_matches: {set: sensitive_path}}]
+
+  - id: secret-write                   # and don't get copied into other files
+    action: deny
+    class: write
+    when: [{any_arg_matches: {set: secret}}]
+
+  - id: runs-later-write               # no planting code that runs on the next commit/open
+    action: deny
+    class: write
+    when: [{any_arg_matches: {set: runs_later}}]
+
+  - id: sensitive-write                # no overwriting credential files either
+    action: deny
+    class: write
+    when: [{any_arg_matches: {set: sensitive_path}}]
+
+  - id: hint-disagrees                 # server says a read is destructive: believe it
+    action: escalate
+    class: read
+    when: [{hint: destructive}]

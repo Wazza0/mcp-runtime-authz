@@ -207,7 +207,7 @@ zero for a small number of hand-reviewed calls.
 
 ## Bugs the evaluation found
 
-All three are fixed and have regression tests.
+All four are fixed and have regression tests.
 
 1. **Whole-file exfiltration bypassed taint tracking.** Found by the ablation. A rule meant to
    exempt a *link* copied whole from a note exempted *any* value copied whole, so pasting an entire
@@ -221,6 +221,14 @@ All three are fixed and have regression tests.
    firing rule and its reason, quoting the rejected values, so injected instructions could probe
    the policy and retry (for example, switch encodings after "carries secret data"). The agent now
    gets a generic refusal and an audit reference.
+
+4. **Arrays hid denied paths from every rule.** Found later, by running the proxy in front of the
+   official MCP filesystem server rather than our simulated one. Its `read_multiple_files` takes
+   paths as an array, and conditions only inspected string arguments, so `["notes.md", ".env"]`
+   returned the `.env` secret while a direct read of `.env` was refused. Conditions now search
+   inside arrays and objects (which also covers `edit_file`'s nested edits), with regression tests
+   and an opt-in end-to-end test against the real server. Our own tool server only takes strings,
+   so no amount of testing against it could have found this.
 
 One process bug is worth recording too: the first compile-fail tests were rustdoc `compile_fail`
 blocks, which pass on *any* compile error. A deliberately wrong error code still passed. They were
