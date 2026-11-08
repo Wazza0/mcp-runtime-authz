@@ -185,6 +185,8 @@ Policies are YAML data; the engine is generic. Start from `authz init`, a
 - **Malformed policies are rejected:** duplicate keys, unknown fields, bad patterns, and rules that
   could never fire all fail at load.
 
+The full policy format, every command and the audit log fields are in [docs/reference.md](docs/reference.md).
+
 ## Tool pinning
 
 A tool's description is text your agent reads as instructions, so a server that edits it after you
@@ -291,4 +293,5 @@ escalation, taint tracking, evaluation), then refocused into a proxy for real MC
 ## License
 
 Dual-licensed under [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option.
+Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md).
 Found a way past the guard? Please report it privately: see [SECURITY.md](SECURITY.md).
