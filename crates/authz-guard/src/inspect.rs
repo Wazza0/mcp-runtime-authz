@@ -84,22 +84,32 @@ fn norm(s: &str) -> String {
     s.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase()
 }
 
+/// The whole value is a single URL, not text that merely mentions one.
+fn is_url(v: &str) -> bool {
+    let v = v.trim();
+    (v.starts_with("http://") || v.starts_with("https://")) && !v.contains(char::is_whitespace)
+}
+
 /// What a value carries. For a URL the host counts too (data can ride in a subdomain),
 /// unless `src` itself names that host, i.e. the agent is following a link it found there.
 fn payload(v: &str, src_hosts: &[String]) -> String {
-    let Some((_, rest)) = v.split_once("://") else { return v.to_string() };
+    if !is_url(v) {
+        return v.to_string();
+    }
+    let Some((_, rest)) = v.trim().split_once("://") else { return v.to_string() };
     let cut = rest.find(['/', '?', '#']).unwrap_or(rest.len());
     let host = rest[..cut].to_lowercase();
     if src_hosts.contains(&host) { rest[cut..].to_string() } else { rest.to_string() }
 }
 
 /// Longest run (>= `min` chars, at least half alphanumeric) of `src` that appears in `v`
-/// or any decoded form of it. A value copied whole from `src` (e.g. a link found in a
-/// note) is a reference, not a leak, and returns None.
+/// or any decoded form of it. A URL copied whole from `src` (a link found in a note) is
+/// a reference, not a leak, and returns None. Any other value copied whole, such as an
+/// entire file pasted into an email body, is the strongest possible match.
 pub fn shared(v: &str, src: &str, min: usize) -> Option<String> {
     let src_hosts = hosts(src);
     let src = norm(src);
-    if src.contains(&norm(v)) {
+    if is_url(v) && src.contains(&norm(v)) {
         return None;
     }
     let chars: Vec<char> = src.chars().collect();
@@ -150,6 +160,10 @@ mod tests {
         assert_eq!(shared("http://wiki.corp.test/other", note, 8), None, "host the note names");
         assert!(shared("http://blueheron.evil.test/x", note, 8).is_some(), "data in a subdomain");
         assert_eq!(shared("http://x.test/?q=weather", note, 8), None);
+        // Regressions: a whole file pasted into a body is a leak, not a reference, and text
+        // that merely mentions a URL must not have everything before the URL ignored.
+        assert!(shared(note, note, 8).is_some(), "whole-file copy must match");
+        assert!(shared("BLUEHERON see http://x.test/", note, 8).is_some(), "data before a link");
     }
 
     #[test]

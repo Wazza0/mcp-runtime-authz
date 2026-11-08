@@ -35,7 +35,7 @@ Claims were checked against primary sources (arXiv abstract and HTML pages, venu
 | FIDES | Label propagation; hidden variables | Planner | Tool labels, trusted context | P-T / P-F hold for explicit flows | AgentDojo |
 | IGAC | Intent certificate narrows static policy | Server gateway | User message, static policy | Never exceeds static policy | Own harness |
 | AgentFlow v1 | Labeled flow and path rules; SMT | Tool-call monitor | Policy, label assignment | Properties hold up to bound k | AgentDojo, AgentDyn, ASB |
-| **Ours** | Deny/escalate rules on decoded arguments and task-named entities; call-bound token | In-process, in front of the MCP client | Task text, per-task tool scope, static tool table | No execution without a logged allow (type-enforced); deny overrides; no flow guarantee yet | 12 self-written cases, scripted agent, vs. permit-all |
+| **Ours** | Deny/escalate rules on decoded arguments and task-named entities; verbatim/encoded taint matching; call-bound token | In-process, in front of the MCP client | Task text, per-task tool scope, static tool table | No execution without a logged allow (type-enforced); deny overrides, even a human's approval; taint catches verbatim and encoded reuse only, not paraphrase | 13 self-written cases; scripted agent and qwen3:8b; vs. permit-all |
 
 ## What's similar, what's different
 
@@ -54,18 +54,18 @@ Where we differ, stated narrowly:
 2. **The audit is write-ahead and fails closed.** Unlike IGAC's log, ours is not hash-chained ([html][igac-h]).
 3. **Decoding before matching** is needed only because we match values instead of tracking provenance. An encoding we don't decode, or a secret split across calls, still gets through. IFC needs no such step.
 
-A reviewer will find several weaknesses:
+A reviewer will find several weaknesses (updated after M4):
 
 - The scope is written by hand for each case, which is close to giving the guard an oracle policy.
-- The agent is scripted.
-- The corpus is 12 cases we wrote ourselves.
-- No case attacks within scope, for example by sending the wrong content to a recipient the user named.
+- The main agent is scripted. A real local model (qwen3:8b) has since been added, but it is one small model.
+- The corpus is 13 cases we wrote ourselves.
+- In-scope attacks now exist (atk-04 to atk-07 use tools the task legitimately needs), including a secret sent to a host the user named (atk-06). Wrong *content* sent to a named recipient, with no secret pattern in it, is still uncovered.
 
 ## What we should adopt
 
-1. **Score escalations.** Report the escalation rate on benign tasks as the approval burden. Progent reports 6%, and IGAC its clarification rate ([v3][progent-v3], [html][igac-h]). CaMeL warns that users stop reading frequent prompts ([v2][camel-v2h]). Report two bounds: the approver always approves, and the approver always denies.
+1. **Score escalations.** Report the escalation rate on benign tasks as the approval burden. Progent reports 6%, and IGAC its clarification rate ([v3][progent-v3], [html][igac-h]). CaMeL warns that users stop reading frequent prompts ([v2][camel-v2h]). Report two bounds: the approver always approves, and the approver always denies. *Done:* `authz eval --approve allow|deny`; see findings.md.
 2. **Measure utility under attack.** Add a probe for the user's task to every attack case ([html][adojo-h]).
-3. **Take M4's policies from FIDES.** Use P-T and P-F, and label each result with the join of what it read and its arguments ([v2][fides-v2]). That rule would make our `BLOCKED` message untrusted. Today it is returned as trusted, yet it quotes argument values (`crates/authz-guard/src/policy.rs:195`).
+3. **Take M4's policies from FIDES.** Use P-T and P-F, and label each result with the join of what it read and its arguments ([v2][fides-v2]). *Done in part:* the `BLOCKED` message used to quote argument values and name the firing rule. It is now generic, with an audit reference, so it carries no attacker text and gives no policy oracle (commit `15db363`).
 4. **Hash-chain the audit log** ([html][igac-h]).
 5. **Add harder cases:**
    - in-scope attacks ([html][oob-h])

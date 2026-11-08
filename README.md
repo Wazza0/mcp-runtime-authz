@@ -66,8 +66,9 @@ an `Authorization`. A deny is a different type and has no path to execution.
 ## Framework mapping
 
 Each attack case carries `refs`: **OWASP Top 10 for Agentic Applications 2026** (ASI, primary),
-OWASP Top 10 for LLM Applications 2025, and MITRE ATLAS technique IDs. ATLAS IDs are verified
-against official release data in M5.
+OWASP Top 10 for LLM Applications 2025, and MITRE ATLAS technique IDs. All three are pinned from
+official sources in `eval/frameworks/` (ATLAS v2026.10), and `tests/refs.rs` fails if any case
+cites an ID that does not exist.
 
 ## Run
 
@@ -78,6 +79,10 @@ cargo run -p authz-cli --bin authz -- run --unguarded    # permit-all baseline
 cargo run -p authz-cli --bin authz -- run eval/corpus/atk-01-web-exfil.json -v
 cargo run -p authz-cli --bin authz -- run --model ollama   # real local model
 cargo test --workspace
+
+# evaluation: headline numbers (block rate, FPR), per-case table, JSON in eval/out/
+cargo run --release -p authz-cli --bin authz -- eval --ablation
+cargo run --release -p authz-cli --bin authz -- eval --model ollama --approve allow
 ```
 
 ## Models
@@ -98,4 +103,4 @@ plain data, so a model backend never gains a path to execution.
 - [x] **M2** context-aware policy: 6/6 attacks blocked (3 of them in-scope, caught by argument inspection), 6/6 benign tasks complete
 - [x] **M3** escalation: borderline calls pause for a human (approve runs it, deny stops it, both audited); approvals can never override a deny
 - [x] **M4** taint tracking: private data read this session cannot ride an egress call to a destination the user didn't name; it stops a codename leak in a URL path that every M2 rule misses
-- [ ] M5 eval + report
+- [x] **M5** eval + report: `authz eval` reproduces the headline numbers; write-up in [report/findings.md](report/findings.md)
