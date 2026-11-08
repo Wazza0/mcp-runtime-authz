@@ -16,9 +16,6 @@ use tokio::process::Command;
 
 use crate::token::Authorization;
 
-/// Tools whose output originates outside the trust boundary.
-const UNTRUSTED: &[&str] = &["http_fetch", "fs_read"];
-
 pub struct Mcp {
     svc: RunningService<RoleClient, ()>,
 }
@@ -73,10 +70,6 @@ impl Mcp {
                 .join("\n"),
             Err(e) => format!("tool error: {e}"),
         };
-        if UNTRUSTED.contains(&call.tool.as_str()) {
-            ToolResult::untrusted(text, call.tool.clone())
-        } else {
-            ToolResult::trusted(text)
-        }
+        ToolResult::new(text)
     }
 }

@@ -5,7 +5,7 @@ default: deny
 
 # Trusted risk classes, set here rather than by the server.
 tools:
-  fs_read:    {action: allow, class: read}
+  fs_read:    {action: allow, class: read, taint: private}   # local files: private data
   http_fetch: {action: allow, class: egress}   # MCP-annotated read-only, yet an exfil channel
   email_send: {action: allow, class: egress}
   shell_run:  {action: allow, class: exec}
@@ -49,6 +49,20 @@ rules:
     when:
       - {arg_not_in_task: {arg: url, kind: host}}
       - {query_longer: {arg: url, len: 48}}
+
+  - id: tainted-fetch           # private data riding a URL to a host the user didn't name
+    action: deny
+    tool: http_fetch
+    when:
+      - {carries_taint: {label: private, min: 8, args: [url]}}
+      - {arg_not_in_task: {arg: url, kind: host}}
+
+  - id: tainted-mail            # private data mailed to someone the user didn't name; a human may know better
+    action: escalate
+    tool: email_send
+    when:
+      - {carries_taint: {label: private, min: 8, args: [subject, body]}}
+      - {arg_not_in_task: {arg: to, kind: email}}
 
   - id: unrequested-command     # exec only what the user literally asked for
     action: deny

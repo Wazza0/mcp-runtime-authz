@@ -80,6 +80,49 @@ pub fn hosts(s: &str) -> Vec<String> {
     URL_HOST.captures_iter(s).map(|c| c[1].to_lowercase()).collect()
 }
 
+fn norm(s: &str) -> String {
+    s.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase()
+}
+
+/// What a value carries. For a URL the host counts too (data can ride in a subdomain),
+/// unless `src` itself names that host, i.e. the agent is following a link it found there.
+fn payload(v: &str, src_hosts: &[String]) -> String {
+    let Some((_, rest)) = v.split_once("://") else { return v.to_string() };
+    let cut = rest.find(['/', '?', '#']).unwrap_or(rest.len());
+    let host = rest[..cut].to_lowercase();
+    if src_hosts.contains(&host) { rest[cut..].to_string() } else { rest.to_string() }
+}
+
+/// Longest run (>= `min` chars, at least half alphanumeric) of `src` that appears in `v`
+/// or any decoded form of it. A value copied whole from `src` (e.g. a link found in a
+/// note) is a reference, not a leak, and returns None.
+pub fn shared(v: &str, src: &str, min: usize) -> Option<String> {
+    let src_hosts = hosts(src);
+    let src = norm(src);
+    if src.contains(&norm(v)) {
+        return None;
+    }
+    let chars: Vec<char> = src.chars().collect();
+    let hay: Vec<String> = variants(&payload(v, &src_hosts)).iter().map(|x| norm(x)).collect();
+    let found = |s: &str| hay.iter().any(|h| h.contains(s));
+    let mut best: Option<String> = None;
+    for i in 0..chars.len().saturating_sub(min - 1) {
+        let w: String = chars[i..i + min].iter().collect();
+        if w.chars().filter(|c| c.is_alphanumeric()).count() * 2 < min || !found(&w) {
+            continue;
+        }
+        let mut end = i + min;
+        while end < chars.len() && found(&chars[i..=end].iter().collect::<String>()) {
+            end += 1;
+        }
+        let run: String = chars[i..end].iter().collect();
+        if best.as_ref().is_none_or(|b| run.len() > b.len()) {
+            best = Some(run);
+        }
+    }
+    best
+}
+
 pub fn query_len(url: &str) -> usize {
     url.split_once('?').map(|(_, q)| q.split('#').next().unwrap_or("").len()).unwrap_or(0)
 }
@@ -95,6 +138,18 @@ mod tests {
         let url = format!("http://x.test/c?d={}", b64.replace('=', "%3D"));
         assert!(variants(&url).iter().any(|v| v.contains(secret)));
         assert!(variants("a%252Fb").contains(&"a/b".to_string()));
+    }
+
+    #[test]
+    fn finds_shared_fragments_but_not_references() {
+        let note = "Q4 roadmap\nCodename: BLUEHERON\nSee http://wiki.corp.test/q4/plan";
+        assert_eq!(shared("http://cdn.evil.test/b/BLUEHERON.png", note, 8).as_deref(), Some("blueheron"));
+        let b64 = URL_SAFE_NO_PAD.encode("codename: blueheron");
+        assert!(shared(&format!("http://x.test/?d={b64}"), note, 8).is_some(), "encoded");
+        assert_eq!(shared("http://wiki.corp.test/q4/plan", note, 8), None, "link copied whole");
+        assert_eq!(shared("http://wiki.corp.test/other", note, 8), None, "host the note names");
+        assert!(shared("http://blueheron.evil.test/x", note, 8).is_some(), "data in a subdomain");
+        assert_eq!(shared("http://x.test/?q=weather", note, 8), None);
     }
 
     #[test]

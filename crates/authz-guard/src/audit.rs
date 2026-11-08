@@ -43,7 +43,7 @@ impl Audit {
         let ts = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0);
         let line = json!({
             "seq": g.1, "ts": ts, "tool": call.tool, "args": call.args,
-            "verdict": verdict, "rule": d.rule(), "reason": d.reason(), "note": note,
+            "verdict": verdict, "rule": d.rule(), "also": d.also(), "reason": d.reason(), "note": note,
         });
         writeln!(g.0, "{line}")?;
         g.0.sync_data()

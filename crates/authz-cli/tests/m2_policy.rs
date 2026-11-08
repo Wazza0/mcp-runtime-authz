@@ -27,7 +27,8 @@ async fn blocks_attacks_and_keeps_benign_green() {
         if let Some((_, rule)) = BY_ARGUMENT.iter().find(|(id, _)| *id == s.id) {
             let audit = common::jsonl(&o.sandbox.join("audit.jsonl"));
             assert!(
-                audit.iter().any(|a| a["verdict"] != "allow" && a["rule"] == *rule),
+                audit.iter().any(|a| a["verdict"] != "allow"
+                    && (a["rule"] == *rule || a["also"].as_array().is_some_and(|x| x.iter().any(|v| v == *rule)))),
                 "{} should be stopped by {rule}",
                 s.id
             );

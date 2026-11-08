@@ -7,14 +7,12 @@ use serde_json::{Map, Value};
 
 pub type Args = Map<String, Value>;
 
-/// Who originated a value: user prompt, model output, or a tool result.
-/// Tool-sourced data is untrusted; M4 propagates that as taint.
+/// Who proposed a call. Every call reaching the guard today comes from the model.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Source {
     User,
     Model,
-    Tool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -32,28 +30,16 @@ impl ToolCall {
     pub fn arg(&self, k: &str) -> &str {
         self.args.get(k).and_then(Value::as_str).unwrap_or_default()
     }
-
-    /// Every string in args, flattened. Used for argument inspection.
-    pub fn strings(&self) -> Vec<&str> {
-        self.args.values().filter_map(Value::as_str).collect()
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolResult {
     pub text: String,
-    /// Set when the content came from outside the trust boundary.
-    pub tainted: bool,
-    pub origin: Option<String>,
 }
 
 impl ToolResult {
-    pub fn trusted(text: impl Into<String>) -> Self {
-        Self { text: text.into(), tainted: false, origin: None }
-    }
-
-    pub fn untrusted(text: impl Into<String>, origin: impl Into<String>) -> Self {
-        Self { text: text.into(), tainted: true, origin: Some(origin.into()) }
+    pub fn new(text: impl Into<String>) -> Self {
+        Self { text: text.into() }
     }
 }
 
@@ -61,17 +47,35 @@ impl ToolResult {
 #[serde(tag = "verdict", rename_all = "snake_case")]
 pub enum Decision {
     Allow,
-    Block { reason: String, rule: String },
-    Escalate { reason: String, rule: String },
+    /// `also`: other rules that matched but were not the most severe.
+    Block {
+        reason: String,
+        rule: String,
+        #[serde(default)]
+        also: Vec<String>,
+    },
+    Escalate {
+        reason: String,
+        rule: String,
+        #[serde(default)]
+        also: Vec<String>,
+    },
 }
 
 impl Decision {
     pub fn block(rule: &str, reason: impl Into<String>) -> Self {
-        Self::Block { reason: reason.into(), rule: rule.into() }
+        Self::Block { reason: reason.into(), rule: rule.into(), also: Vec::new() }
     }
 
     pub fn escalate(rule: &str, reason: impl Into<String>) -> Self {
-        Self::Escalate { reason: reason.into(), rule: rule.into() }
+        Self::Escalate { reason: reason.into(), rule: rule.into(), also: Vec::new() }
+    }
+
+    pub fn with_also(mut self, ids: Vec<String>) -> Self {
+        if let Self::Block { also, .. } | Self::Escalate { also, .. } = &mut self {
+            *also = ids;
+        }
+        self
     }
 
     pub fn allowed(&self) -> bool {
@@ -91,11 +95,23 @@ impl Decision {
             Self::Block { rule, .. } | Self::Escalate { rule, .. } => rule,
         }
     }
+
+    pub fn also(&self) -> &[String] {
+        match self {
+            Self::Allow => &[],
+            Self::Block { also, .. } | Self::Escalate { also, .. } => also,
+        }
+    }
 }
 
 /// The engine: ToolCall + Context -> Decision. Pure, no side effects.
 pub trait Policy: Send + Sync {
     fn decide(&self, call: &ToolCall, ctx: &Context) -> Decision;
+
+    /// Label to attach to this tool's output, if the policy tracks it as tainted.
+    fn taint(&self, _tool: &str) -> Option<String> {
+        None
+    }
 }
 
 /// Anything that can run a tool call. The agent only ever holds one of these.
@@ -133,6 +149,17 @@ impl Hints {
     }
 }
 
+/// Output of an executed call that the policy labeled. Recorded by the interceptor,
+/// never by the model, so the agent cannot launder data by claiming it is clean.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Taint {
+    pub label: String,
+    /// e.g. `fs_read notes/roadmap.md`
+    pub source: String,
+    pub step: usize,
+    pub text: String,
+}
+
 /// What the guard knows about the session when it judges a call.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Context {
@@ -140,8 +167,7 @@ pub struct Context {
     pub task: String,
     pub scope: Vec<String>,
     pub history: Vec<ToolCall>,
-    /// Fragments of untrusted data seen so far (M4).
-    pub taint: Vec<String>,
+    pub taint: Vec<Taint>,
     pub tools: BTreeMap<String, Hints>,
 }
 

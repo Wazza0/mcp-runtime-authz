@@ -40,6 +40,18 @@ ones permitted for sensitive arguments.
 MCP tool annotations are treated as untrusted hints that can only tighten a decision. `http_fetch`
 is honestly annotated read-only, yet it is the main exfiltration channel.
 
+## Taint tracking
+
+Tools the policy labels (e.g. `fs_read: {taint: private}`) have their output recorded in a session
+ledger by the interceptor, never by the model. `carries_taint` holds when an argument, after
+decoding, shares a run of at least `min` characters with labeled output. A URL's host counts too
+(data can ride in a subdomain), unless the source itself names that host, and a value copied whole
+from the source is treated as a reference rather than a leak. `tainted-fetch` denies private data
+in a URL to an unnamed host; `tainted-mail` escalates private data mailed to an unnamed recipient.
+
+Limitation: this tracks verbatim and encoded reuse. A model that paraphrases private data defeats
+it. Precise information-flow control needs the planner and data to be separated (as in CaMeL).
+
 ## Escalation
 
 `escalate` pauses the call for a human: `--approve ask` prompts on the terminal (the default when
@@ -85,5 +97,5 @@ plain data, so a model backend never gains a path to execution.
 - [x] **M1** interceptor + allowlist + audit: every execution has a prior logged allow; denying a tool blocks it
 - [x] **M2** context-aware policy: 6/6 attacks blocked (3 of them in-scope, caught by argument inspection), 6/6 benign tasks complete
 - [x] **M3** escalation: borderline calls pause for a human (approve runs it, deny stops it, both audited); approvals can never override a deny
-- [ ] M4 taint tracking
+- [x] **M4** taint tracking: private data read this session cannot ride an egress call to a destination the user didn't name; it stops a codename leak in a URL path that every M2 rule misses
 - [ ] M5 eval + report

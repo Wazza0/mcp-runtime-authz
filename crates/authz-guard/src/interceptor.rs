@@ -2,7 +2,7 @@
 
 use std::sync::{Arc, Mutex};
 
-use authz_core::{Context, Decision, Executor, Policy, ToolCall, ToolResult, ToolSpec};
+use authz_core::{Context, Decision, Executor, Policy, Taint, ToolCall, ToolResult, ToolSpec};
 
 use crate::{
     approval::Approver,
@@ -21,7 +21,12 @@ pub struct Interceptor {
 }
 
 fn blocked(d: &Decision, extra: &str) -> ToolResult {
-    ToolResult::trusted(format!("BLOCKED [{}]: {}{extra}", d.rule(), d.reason()))
+    ToolResult::new(format!("BLOCKED [{}]: {}{extra}", d.rule(), d.reason()))
+}
+
+fn describe(call: &ToolCall) -> String {
+    let first = call.args.values().find_map(|v| v.as_str()).unwrap_or_default();
+    format!("{} {}", call.tool, first.chars().take(80).collect::<String>())
 }
 
 fn audit_down(e: std::io::Error) -> ToolResult {
@@ -86,8 +91,13 @@ impl Executor for Interceptor {
             }
         };
         let r = self.mcp.exec(auth).await;
+        let label = self.policy.taint(&call.tool);
         if let Ok(mut c) = self.ctx.lock() {
             c.history.push(call.clone());
+            if let Some(label) = label {
+                let step = c.history.len();
+                c.taint.push(Taint { label, source: describe(call), step, text: r.text.clone() });
+            }
         }
         r
     }

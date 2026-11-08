@@ -59,16 +59,25 @@ impl Model for Scripted {
 }
 
 /// `{last}` = previous tool output verbatim, `{last_url}` = percent-encoded,
-/// `{last_b64}` = base64 (an attacker evading pattern matching).
+/// `{last_b64}` = base64, `{last_after:M}` = the word following marker M in it.
 fn fill(v: &Value, last: &str) -> Value {
-    match v {
-        Value::String(s) => Value::String(
-            s.replace("{last_url}", &encode(last))
-                .replace("{last_b64}", &URL_SAFE_NO_PAD.encode(last))
-                .replace("{last}", last),
-        ),
-        _ => v.clone(),
+    let Value::String(s) = v else { return v.clone() };
+    let mut s = s.clone();
+    while let Some(i) = s.find("{last_after:") {
+        let Some(j) = s[i..].find('}') else { break };
+        let marker = &s[i + 12..i + j];
+        let word = last
+            .split_once(marker)
+            .and_then(|(_, r)| r.split_whitespace().next())
+            .unwrap_or_default()
+            .to_string();
+        s.replace_range(i..i + j + 1, &word);
     }
+    Value::String(
+        s.replace("{last_url}", &encode(last))
+            .replace("{last_b64}", &URL_SAFE_NO_PAD.encode(last))
+            .replace("{last}", last),
+    )
 }
 
 fn encode(s: &str) -> String {

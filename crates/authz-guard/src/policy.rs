@@ -15,7 +15,7 @@ use authz_core::{Context, Decision, Policy, ToolCall};
 use regex::Regex;
 use serde::Deserialize;
 
-use crate::inspect::{emails, hosts, query_len, variants};
+use crate::inspect::{emails, hosts, query_len, shared, variants};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -66,6 +66,13 @@ pub enum Cond {
     ArgNotInTask { arg: String, kind: Kind },
     QueryLonger { arg: String, len: usize },
     Hint(Hint),
+    /// An arg (any, or those listed) carries >= `min` chars of output the policy labeled `label`.
+    CarriesTaint {
+        label: String,
+        min: usize,
+        #[serde(default)]
+        args: Vec<String>,
+    },
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -73,6 +80,9 @@ pub enum Cond {
 pub struct ToolDef {
     pub action: Action,
     pub class: Class,
+    /// Label recorded on this tool's output, for taint tracking.
+    #[serde(default)]
+    pub taint: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -134,6 +144,7 @@ impl Rules {
                 .collect::<Result<Vec<_>>>()?;
             patterns.insert(k, rx);
         }
+        let labels: BTreeSet<&str> = spec.tools.values().filter_map(|t| t.taint.as_deref()).collect();
         let mut ids = BTreeSet::new();
         for r in &spec.rules {
             if !ids.insert(r.id.as_str()) {
@@ -143,10 +154,20 @@ impl Rules {
                 bail!("rule {}: unknown tool {t}", r.id);
             }
             for c in &r.when {
-                if let Cond::ArgMatches { set, .. } | Cond::AnyArgMatches { set } = c {
-                    if !patterns.contains_key(set) {
-                        bail!("rule {}: unknown pattern set {set}", r.id);
+                match c {
+                    Cond::ArgMatches { set, .. } | Cond::AnyArgMatches { set }
+                        if !patterns.contains_key(set) =>
+                    {
+                        bail!("rule {}: unknown pattern set {set}", r.id)
                     }
+                    // A label no tool produces would make the rule silently never fire.
+                    Cond::CarriesTaint { label, .. } if !labels.contains(label.as_str()) => {
+                        bail!("rule {}: no tool produces taint label {label}", r.id)
+                    }
+                    Cond::CarriesTaint { min: 0..4, .. } => {
+                        bail!("rule {}: carries_taint.min must be >= 4", r.id)
+                    }
+                    _ => {}
                 }
             }
         }
@@ -161,6 +182,17 @@ impl Rules {
             patterns: BTreeMap::new(),
             rules: Vec::new(),
         }
+    }
+
+    /// The same policy minus some rules. For ablation: what does each rule contribute?
+    pub fn without(&self, ids: &[&str]) -> Self {
+        let mut r = self.clone();
+        r.rules.retain(|x| !ids.contains(&x.id.as_str()));
+        r
+    }
+
+    pub fn rule_ids(&self) -> Vec<&str> {
+        self.rules.iter().map(|r| r.id.as_str()).collect()
     }
 
     fn matches(&self, v: &str, set: &str) -> bool {
@@ -207,11 +239,31 @@ impl Rules {
                 };
                 on.then(|| format!("server declares {tool} {h:?}"))
             }
+            Cond::CarriesTaint { label, min, args } => {
+                call.args
+                    .iter()
+                    .filter(|(k, _)| args.is_empty() || args.contains(k))
+                    .filter_map(|(k, v)| Some((k, v.as_str()?)))
+                    .find_map(|(k, v)| {
+                        ctx.taint.iter().filter(|t| t.label == *label).find_map(|t| {
+                            let frag = shared(v, &t.text, *min)?;
+                            let shown: String = frag.chars().take(40).collect();
+                            Some(format!(
+                                "{tool}.{k} carries {label} data {shown:?} from {} (step {})",
+                                t.source, t.step
+                            ))
+                        })
+                    })
+            }
         }
     }
 }
 
 impl Policy for Rules {
+    fn taint(&self, tool: &str) -> Option<String> {
+        self.tools.get(tool)?.taint.clone()
+    }
+
     fn decide(&self, call: &ToolCall, ctx: &Context) -> Decision {
         let Some(t) = self.tools.get(&call.tool) else {
             return verdict(self.default, "default", format!("{} is not a known tool", call.tool));
@@ -226,6 +278,7 @@ impl Policy for Rules {
                 Some((Restrict::Escalate, base, format!("{} requires approval", call.tool)))
             }
         };
+        let mut matched = Vec::new();
         for r in &self.rules {
             if r.tool.as_ref().is_some_and(|x| *x != call.tool) || r.class.is_some_and(|c| c != t.class)
             {
@@ -235,6 +288,7 @@ impl Policy for Rules {
             if !r.when.iter().all(|c| self.holds(c, call, ctx).map(|w| why.push(w)).is_some()) {
                 continue;
             }
+            matched.push(r.id.clone());
             let worse = match &worst {
                 None => true,
                 Some((a, ..)) => r.action == Restrict::Deny && *a == Restrict::Escalate,
@@ -244,11 +298,12 @@ impl Policy for Rules {
                 worst = Some((r.action, r.id.clone(), why));
             }
         }
-        match worst {
-            None => Decision::Allow,
-            Some((Restrict::Deny, rule, why)) => Decision::block(&rule, why),
-            Some((Restrict::Escalate, rule, why)) => Decision::escalate(&rule, why),
-        }
+        let (d, rule) = match worst {
+            None => return Decision::Allow,
+            Some((Restrict::Deny, rule, why)) => (Decision::block(&rule, why), rule),
+            Some((Restrict::Escalate, rule, why)) => (Decision::escalate(&rule, why), rule),
+        };
+        d.with_also(matched.into_iter().filter(|m| *m != rule).collect())
     }
 }
 
