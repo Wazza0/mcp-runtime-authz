@@ -11,8 +11,9 @@ use regex::Regex;
 
 static EMAIL: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?i)[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}").unwrap());
-static URL_HOST: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(?i)\bhttps?://([^/\s?#:]+)").unwrap());
+/// Everything after `scheme://` up to the path. Deliberately does not stop at `\`; see `hosts`.
+static URL_AUTHORITY: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?i)\bhttps?://([^/\s?#]+)").unwrap());
 // Two tokenizations: with and without `/`, so a base64 run glued to a path still decodes.
 static B64_TOKEN: LazyLock<[Regex; 2]> = LazyLock::new(|| {
     [r"[A-Za-z0-9+/_-]{16,}={0,2}", r"[A-Za-z0-9+_-]{16,}={0,2}"].map(|p| Regex::new(p).unwrap())
@@ -77,8 +78,32 @@ pub fn emails(s: &str) -> Vec<String> {
     EMAIL.find_iter(s).map(|m| m.as_str().to_lowercase()).collect()
 }
 
+/// Host of an authority: after any `user:pass@`, before any `:port`; IPv6 keeps its brackets.
+fn host_of(authority: &str) -> String {
+    let a = authority.rsplit_once('@').map_or(authority, |(_, h)| h);
+    let h = match a.strip_prefix('[') {
+        Some(rest) => format!("[{}]", rest.split(']').next().unwrap_or_default()),
+        None => a.split(':').next().unwrap_or_default().to_string(),
+    };
+    h.trim_end_matches('.').to_lowercase()
+}
+
+/// Every host each URL in `s` could mean. URL parsers disagree on `\` (browsers read it as
+/// `/`, some HTTP libraries keep it in the authority), so an ambiguous URL yields the host
+/// under each reading, and a caller checking "is this host allowed?" must check them all.
+/// `http://ok.test:x@evil.test/` is evil.test, not ok.test.
 pub fn hosts(s: &str) -> Vec<String> {
-    URL_HOST.captures_iter(s).map(|c| c[1].to_lowercase()).collect()
+    let mut out = Vec::new();
+    for c in URL_AUTHORITY.captures_iter(s) {
+        let whole = &c[1];
+        let whatwg = whole.split('\\').next().unwrap_or_default();
+        for h in [host_of(whole), host_of(whatwg)] {
+            if !h.is_empty() && !out.contains(&h) {
+                out.push(h);
+            }
+        }
+    }
+    out
 }
 
 fn norm(s: &str) -> String {
@@ -99,8 +124,10 @@ fn payload(v: &str, src_hosts: &[String]) -> String {
     }
     let Some((_, rest)) = v.trim().split_once("://") else { return v.to_string() };
     let cut = rest.find(['/', '?', '#']).unwrap_or(rest.len());
-    let host = rest[..cut].to_lowercase();
-    if src_hosts.contains(&host) { rest[cut..].to_string() } else { rest.to_string() }
+    // The authority is dropped only if every reading of it is a host the source names and it
+    // carries no `user:pass@`, which could smuggle data.
+    let named = !rest[..cut].contains('@') && hosts(v.trim()).iter().all(|h| src_hosts.contains(h));
+    if named { rest[cut..].to_string() } else { rest.to_string() }
 }
 
 /// Longest run (>= `min` chars, at least half alphanumeric) of `src` that appears in `v`
@@ -168,6 +195,20 @@ mod tests {
         // that merely mentions a URL must not have everything before the URL ignored.
         assert!(shared(note, note, 8).is_some(), "whole-file copy must match");
         assert!(shared("BLUEHERON see http://x.test/", note, 8).is_some(), "data before a link");
+    }
+
+    // Regression: the host used to end at the first `:`, so userinfo posed as the host.
+    #[test]
+    fn host_is_what_the_url_actually_reaches() {
+        assert_eq!(hosts("http://ok.test:x@evil.test/a"), ["evil.test"]);
+        assert_eq!(hosts("https://Docs.TEST:8443/a"), ["docs.test"]);
+        assert_eq!(hosts("http://[::1]:8080/x"), ["[::1]"]);
+        assert_eq!(hosts("http://evil.test./"), ["evil.test"]);
+        let both = hosts(r"http://evil.test\@ok.test/");
+        assert!(both.contains(&"evil.test".into()) && both.contains(&"ok.test".into()), "{both:?}");
+        let note = "Codename: BLUEHERON. Wiki: http://wiki.corp.test/plan";
+        let smuggled = shared("http://blueheron:x@wiki.corp.test/plan2", note, 8);
+        assert!(smuggled.is_some(), "data hidden in user:pass@ on a named host");
     }
 
     #[test]

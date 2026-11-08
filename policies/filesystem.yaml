@@ -28,19 +28,19 @@ patterns:
     - '(?i)aws_secret_access_key'
     - 'gh[pousr]_[A-Za-z0-9]{20,}'
     - '-----BEGIN [A-Z ]*PRIVATE KEY-----'
-  sensitive_path:                      # both separators: the server runs on Windows too
-    - '(^|[\/])\.env(\.[^\/]*)?$'
+  sensitive_path:                      # [\\/] = either separator: the server runs on Windows too
+    - '(^|[\\/])\.env(\.[^\\/]*)?$'
     - '\.(pem|key|p12|pfx)$'
-    - '(^|[\/])id_(rsa|ed25519|ecdsa)'
-    - '(^|[\/])\.ssh([\/]|$)'
-    - '(^|[\/])\.aws[\/]credentials$'
-    - '(^|[\/])\.(npmrc|pypirc|netrc)$'
+    - '(^|[\\/])id_(rsa|ed25519|ecdsa)'
+    - '(^|[\\/])\.ssh([\\/]|$)'
+    - '(^|[\\/])\.aws[\\/]credentials$'
+    - '(^|[\\/])\.(npmrc|pypirc|netrc)$'
   runs_later:                          # writes here execute on a future commit, push, open or login
-    - '(^|[\/])\.git[\/]hooks([\/]|$)'
-    - '(^|[\/])\.github[\/]workflows([\/]|$)'
-    - '(^|[\/])\.husky([\/]|$)'
-    - '(^|[\/])\.vscode[\/](tasks|launch|settings)\.json$'
-    - '(^|[\/])\.(bashrc|zshrc|profile|bash_profile)$'
+    - '(^|[\\/])\.git[\\/]hooks([\\/]|$)'
+    - '(^|[\\/])\.github[\\/]workflows([\\/]|$)'
+    - '(^|[\\/])\.husky([\\/]|$)'
+    - '(^|[\\/])\.vscode[\\/](tasks|launch|settings)\.json$'
+    - '(^|[\\/])\.(bashrc|zshrc|profile|bash_profile)$'
 
 rules:
   - id: sensitive-read                 # secrets stay on disk

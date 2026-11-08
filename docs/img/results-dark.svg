@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 206" width="880" height="206" role="img" aria-label="Results: attacks blocked 100% (7 of 7 scripted, 3 of 3 qwen3); benign tasks broken 0% (0 of 6 in every run); approval prompts on benign tasks 0; bypasses found and fixed 4, each pinned by a test. Small, self-written corpus: a demonstration, not proof of generality. If a human approves every prompt, the block rate drops to 86% scripted and 67% qwen3.">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 206" width="880" height="206" role="img" aria-label="Results: attacks blocked 100% (7 of 7 scripted, 3 of 3 qwen3); benign tasks broken 0% (0 of 6 in every run); approval prompts on benign tasks 0; bypasses found and fixed 6, each pinned by a test. Small, self-written corpus: a demonstration, not proof of generality. If a human approves every prompt, the block rate drops to 86% scripted and 67% qwen3.">
   <style>
     .f { font-family: system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
     .tile { fill: #1a1a19; stroke: rgba(255,255,255,0.10); }
@@ -21,7 +21,7 @@
 
   <rect x="672.5" y="0.5" width="207" height="143" rx="12" class="tile"/>
   <text x="692" y="34" class="f t2" font-size="13">Bypasses found, fixed</text>
-  <text x="692" y="88" class="f t1" font-size="40" font-weight="600">4</text>
+  <text x="692" y="88" class="f t1" font-size="40" font-weight="600">6</text>
   <text x="692" y="118" class="f t2" font-size="12.5">each pinned by a test</text>
 
   <text x="2" y="174" class="f t2" font-size="13">Small, self-written corpus (7 attacks, 6 benign tasks): a demonstration, not proof of generality.</text>

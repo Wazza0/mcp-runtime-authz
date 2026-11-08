@@ -207,7 +207,7 @@ zero for a small number of hand-reviewed calls.
 
 ## Bugs the evaluation found
 
-All four are fixed and have regression tests.
+All six are fixed and have regression tests.
 
 1. **Whole-file exfiltration bypassed taint tracking.** Found by the ablation. A rule meant to
    exempt a *link* copied whole from a note exempted *any* value copied whole, so pasting an entire
@@ -229,6 +229,23 @@ All four are fixed and have regression tests.
    inside arrays and objects (which also covers `edit_file`'s nested edits), with regression tests
    and an opt-in end-to-end test against the real server. Our own tool server only takes strings,
    so no amount of testing against it could have found this.
+5. **Windows paths walked past the filesystem policy.** Found while writing the git starter
+   policy. `filesystem.yaml` was written through a shell heredoc that silently collapsed `\\` to
+   `\`, so every "either separator" class `[\\/]` became `[\/]`, which matches only `/`.
+   `C:\p\.env` and `C:\p\.git\hooks\pre-commit` were allowed. Every test used forward slashes.
+   The file was rewritten without the shell, and a regression test uses real Windows paths; it
+   fails against the old file.
+6. **A URL's userinfo posed as its host.** Also found while writing a starter policy. The host
+   check stopped at the first `:`, so `http://allowed.test:x@evil.test/` passed as `allowed.test`
+   while the request would reach `evil.test`. Hosts are now taken after any `user:pass@` and
+   before any port. Because URL parsers disagree about `\` in the authority (browsers read it as
+   `/`, some HTTP libraries do not), an ambiguous URL now yields the host under each reading and
+   all of them must be allowed. Userinfo also counts as payload for taint tracking, since it can
+   carry data.
+
+Bugs 5 and 6 share a lesson with bug 4: the most useful testing was against real inputs (real
+servers, real Windows paths, real URL syntax), not against fixtures shaped by the same assumptions
+as the code.
 
 One process bug is worth recording too: the first compile-fail tests were rustdoc `compile_fail`
 blocks, which pass on *any* compile error. A deliberately wrong error code still passed. They were

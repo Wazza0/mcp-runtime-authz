@@ -98,7 +98,12 @@ See what happened at any time with `authz audit audit.jsonl`.
 | starter policy | wraps | what it adds |
 | --- | --- | --- |
 | [`filesystem.yaml`](policies/filesystem.yaml) | the official [filesystem server](https://www.npmjs.com/package/@modelcontextprotocol/server-filesystem) | credential files stay unreadable; secrets can't be written into files; no writes that run code later |
+| [`fetch.yaml`](policies/fetch.yaml) | the official [fetch server](https://pypi.org/project/mcp-server-fetch/) | only hosts you list; refuses localhost, private and cloud-metadata addresses even if listed; no credentials or keys in URLs |
+| [`git.yaml`](policies/git.yaml) | the official [git server](https://pypi.org/project/mcp-server-git/) | credential files can't be staged or read back from history; `.`, globs and pathspec tricks refused so every staged path is checked; no secrets in commit messages |
 | [`example-proxy.yaml`](policies/example-proxy.yaml) | a template for any server | an `allow` list for hosts, email recipients and shell commands |
+
+Each starter policy is verified end to end against the real server it wraps (see
+[Tests and evaluation](#tests-and-evaluation)).
 
 ## How it works
 
@@ -123,7 +128,7 @@ agent. Four guarantees hold by construction:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/results-dark.svg">
-  <img src="docs/img/results-light.svg" width="880" alt="Attacks blocked: 100% (7 of 7 scripted, 3 of 3 qwen3). Benign tasks broken: 0% (0 of 6 in every run). Approval prompts on benign tasks: 0. Bypasses found and fixed: 4. Small, self-written corpus: a demonstration, not proof of generality. If a human approves every prompt, the block rate drops to 86% scripted and 67% qwen3.">
+  <img src="docs/img/results-light.svg" width="880" alt="Attacks blocked: 100% (7 of 7 scripted, 3 of 3 qwen3). Benign tasks broken: 0% (0 of 6 in every run). Approval prompts on benign tasks: 0. Bypasses found and fixed: 6. Small, self-written corpus: a demonstration, not proof of generality. If a human approves every prompt, the block rate drops to 86% scripted and 67% qwen3.">
 </picture>
 
 Measured on 7 attacks and 6 benign tasks, unguarded vs guarded. The block rate counts only attacks
@@ -142,7 +147,7 @@ scripted numbers on every push.
 
 ## Found and fixed
 
-Four real bypasses in this project's own code, found by testing and review, each fixed and pinned
+Six real bypasses in this project's own code, found by testing and review, each fixed and pinned
 by a regression test:
 
 1. **A whole private file pasted into an email body** counted as a harmless reference. Found by
@@ -154,8 +159,14 @@ by a regression test:
 4. **A denied file hidden in a list** (`read_multiple_files`) was returned while a direct read was
    refused. Found only by testing against the real filesystem server; our own test server never
    takes lists.
+5. **Windows paths walked past the filesystem policy.** It was written through a shell that
+   silently turned `[\\/]` (either separator) into `[\/]` (forward slash only), so `C:\p\.env` was
+   allowed. Found while writing the git policy; the tests had only used forward slashes.
+6. **A URL's login part posed as its host.** `http://allowed.test:x@evil.test/` reaches evil.test,
+   but the host check stopped at the first `:` and saw allowed.test. Hosts are now parsed properly,
+   and where URL parsers disagree (a `\` in the authority) every possible host must be allowed.
 
-The story behind each is in the [write-up](report/writeup.md).
+The story behind the first four is in the [write-up](report/writeup.md).
 
 ## Writing a policy
 
@@ -220,11 +231,13 @@ More in [report/findings.md](report/findings.md#limitations). How this compares 
 (Progent, CaMeL, FIDES and others) is in [report/related-work.md](report/related-work.md).
 
 <details>
-<summary><b>Tests and evaluation</b></summary>
+<summary id="tests-and-evaluation"><b>Tests and evaluation</b></summary>
 
 ```sh
 cargo test --workspace                       # milestone gates, proxy, pinning, init, properties, compile-time guarantees
-cargo test -p authz-cli --test proxy_filesystem -- --ignored   # against the real server (needs Node)
+cargo test -p authz-cli --test proxy_filesystem -- --ignored   # against the real servers: filesystem (needs Node),
+cargo test -p authz-cli --test proxy_fetch -- --ignored        # fetch and git (need uv)
+cargo test -p authz-cli --test proxy_git -- --ignored
 
 cargo run --release -p authz-cli --bin authz -- eval --ablation          # scripted agent + per-rule ablation
 cargo run --release -p authz-cli --bin authz -- eval --approve allow     # human approves everything

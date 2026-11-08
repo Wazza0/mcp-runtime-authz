@@ -532,6 +532,25 @@ mod tests {
         );
     }
 
+    // Regression: the file was once written through a shell that collapsed `\\` to `\`,
+    // turning every `[\\/]` into `[\/]`, which matches `/` only. Windows paths walked past.
+    #[test]
+    fn windows_paths_are_caught() {
+        let r = filesystem();
+        let none = Context::default();
+        let rule = |t: &str, a: serde_json::Value| r.decide(&call(t, a), &none).rule().to_string();
+        assert_eq!(rule("read_text_file", json!({"path": r"C:\p\.env"})), "sensitive-read");
+        assert_eq!(
+            rule("read_text_file", json!({"path": r"C:\Users\me\.ssh\id_rsa"})),
+            "sensitive-read"
+        );
+        let hook = json!({"path": r"C:\p\.git\hooks\pre-commit", "content": "x"});
+        assert_eq!(rule("write_file", hook), "runs-later-write");
+        assert!(
+            r.decide(&call("read_text_file", json!({"path": r"C:\p\notes.md"})), &none).allowed()
+        );
+    }
+
     #[test]
     fn every_listed_command_must_be_permitted() {
         let y = "default: deny\nallow: {commands: [ls]}\ntools: {run: {action: allow, class: exec}}\n\
