@@ -237,7 +237,8 @@ More in [report/findings.md](report/findings.md#limitations). How this compares 
 <summary id="tests-and-evaluation"><b>Tests and evaluation</b></summary>
 
 ```sh
-cargo test --workspace                       # milestone gates, proxy, pinning, init, properties, compile-time guarantees
+cargo test --workspace                       # milestone gates, published results, proxy, pinning, init, properties, compile-time guarantees
+cargo llvm-cov --workspace --summary-only    # line coverage; CI fails below 80%
 cargo test -p authz-cli --test proxy_filesystem -- --ignored   # against the real servers: filesystem (needs Node),
 cargo test -p authz-cli --test proxy_fetch -- --ignored        # fetch and git (need uv)
 cargo test -p authz-cli --test proxy_git -- --ignored
@@ -247,7 +248,8 @@ cargo run --release -p authz-cli --bin authz -- eval --approve allow     # human
 cargo run --release -p authz-cli --bin authz -- eval --model ollama      # real local model (needs Ollama)
 ```
 
-`tests/proxy.rs` drives the proxy with the official MCP SDK client and checks that allowed calls
+`tests/m5_eval.rs` runs the whole evaluation and fails if the headline numbers or the ablation
+table in [report/findings.md](report/findings.md) stop holding. `tests/proxy.rs` drives the proxy with the official MCP SDK client and checks that allowed calls
 pass through intact and refused ones never reach the server. Attack cases carry references to the
 OWASP Top 10 for Agentic Applications 2026, the OWASP LLM Top 10 2025 and MITRE ATLAS v2026.10,
 pinned from official sources in `eval/frameworks/` and checked by `tests/refs.rs`.

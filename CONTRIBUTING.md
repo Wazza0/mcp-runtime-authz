@@ -31,7 +31,9 @@ welcome.
 - **Formatting and lints:** code is formatted with `rustfmt` using the repository's
   [`rustfmt.toml`](rustfmt.toml), and passes `clippy` with warnings treated as errors.
 - **Tests:** every behaviour change comes with a test. A fix for a bypass comes with a regression
-  test that fails before the fix and passes after it.
+  test that fails before the fix and passes after it. CI fails if line coverage of the test suite
+  drops below 80% (`cargo llvm-cov --workspace --summary-only`). A change that moves the evaluation
+  numbers must update `report/findings.md` and `tests/m5_eval.rs` together.
 - **One decision path:** every tool call is decided by the `Gate`
   (`crates/authz-guard/src/gate.rs`). Don't add a second place that allows or refuses calls, and
   keep the compile-time guarantees in `crates/authz-guard/tests/ui` passing.
