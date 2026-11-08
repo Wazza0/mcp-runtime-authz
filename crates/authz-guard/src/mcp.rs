@@ -5,7 +5,7 @@
 use std::path::Path;
 
 use anyhow::{Context as _, Result};
-use authz_core::{Hints, ToolResult};
+use authz_core::{Hints, ToolResult, ToolSpec};
 use rmcp::{
     RoleClient, ServiceExt,
     model::CallToolRequestParams,
@@ -36,8 +36,8 @@ impl Mcp {
         Ok(Self { svc })
     }
 
-    /// Tool names with their server-declared (untrusted) annotations.
-    pub async fn tools(&self) -> Result<Vec<(String, Hints)>> {
+    /// Tool descriptions with their server-declared (untrusted) annotations.
+    pub async fn tools(&self) -> Result<Vec<(ToolSpec, Hints)>> {
         Ok(self
             .svc
             .list_all_tools()
@@ -46,7 +46,12 @@ impl Mcp {
             .map(|t| {
                 let a = t.annotations.unwrap_or_default();
                 let h = Hints::from_mcp(a.read_only_hint, a.destructive_hint, a.open_world_hint);
-                (t.name.into_owned(), h)
+                let spec = ToolSpec {
+                    name: t.name.into_owned(),
+                    description: t.description.map(|d| d.into_owned()).unwrap_or_default(),
+                    schema: serde_json::Value::Object((*t.input_schema).clone()),
+                };
+                (spec, h)
             })
             .collect())
     }

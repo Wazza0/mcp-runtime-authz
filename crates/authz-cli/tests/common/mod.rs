@@ -1,6 +1,7 @@
-use std::path::Path;
+use std::{path::Path, sync::Arc};
 
-use authz_cli::Rig;
+use authz_cli::{Brain, Rig};
+use authz_guard::DenyAll;
 use serde_json::Value;
 
 pub fn rig() -> Rig {
@@ -9,6 +10,8 @@ pub fn rig() -> Rig {
         root: root.to_path_buf(),
         server: env!("CARGO_BIN_EXE_authz").into(),
         server_args: vec!["serve-tools".into()],
+        brain: Brain::Scripted,
+        approver: Arc::new(DenyAll),
     }
 }
 

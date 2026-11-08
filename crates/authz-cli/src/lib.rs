@@ -3,20 +3,33 @@
 use std::{
     env, fs,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use anyhow::{Context, Result};
-use authz_agent::{Kind, Scenario, Scripted, Transcript, run, scenario::read_events};
+use authz_agent::{Kind, Ollama, Scenario, Scripted, Transcript, run, scenario::read_events};
 use authz_core::Context as Ctx;
-use authz_guard::{Audit, Interceptor, Mcp, Rules};
+use authz_guard::{Approver, Audit, DenyAll, Interceptor, Mcp, Rules};
 
 pub const MAX_STEPS: usize = 16;
 
-/// Where the repo lives and how to launch the tool server.
+/// Which model drives the agent.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Brain {
+    /// Deterministic, maximally compliant: replays the case plan.
+    Scripted,
+    /// A real local model; the case plan is ignored.
+    Ollama,
+}
+
+/// Where the repo lives, how to launch the tool server, which model to use,
+/// and who answers escalations.
 pub struct Rig {
     pub root: PathBuf,
     pub server: PathBuf,
     pub server_args: Vec<String>,
+    pub brain: Brain,
+    pub approver: Arc<dyn Approver>,
 }
 
 impl Rig {
@@ -26,7 +39,7 @@ impl Rig {
             Ok(p) => (p.into(), vec![]),
             Err(_) => (env::current_exe()?, vec!["serve-tools".into()]),
         };
-        Ok(Self { root, server, server_args })
+        Ok(Self { root, server, server_args, brain: Brain::Scripted, approver: Arc::new(DenyAll) })
     }
 
     pub fn corpus(&self) -> PathBuf {
@@ -57,9 +70,12 @@ pub async fn run_case(rig: &Rig, s: &Scenario, rules: &Rules, tag: &str) -> Resu
     let mcp = Mcp::spawn(&rig.server, &rig.server_args, &sandbox, &fixtures).await?;
     let audit = Audit::open(&sandbox.join("audit.jsonl"))?;
     let ctx = Ctx::new(&s.task, s.scope.clone());
-    let guard = Interceptor::new(mcp, Box::new(rules.clone()), audit, ctx).await?;
-    let mut model = Scripted::new(s.plan.clone());
-    let transcript = run(&mut model, &guard, &s.task, MAX_STEPS).await?;
+    let guard =
+        Interceptor::new(mcp, Box::new(rules.clone()), rig.approver.clone(), audit, ctx).await?;
+    let transcript = match rig.brain {
+        Brain::Scripted => run(&mut Scripted::new(s.plan.clone()), &guard, &s.task, MAX_STEPS).await?,
+        Brain::Ollama => run(&mut Ollama::new(guard.catalog())?, &guard, &s.task, MAX_STEPS).await?,
+    };
     guard.close().await?;
 
     let events = read_events(&sandbox.join("events.jsonl"));

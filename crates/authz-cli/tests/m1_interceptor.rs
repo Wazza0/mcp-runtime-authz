@@ -15,9 +15,9 @@ async fn every_execution_has_a_prior_logged_allow() {
         let events = common::jsonl(&o.sandbox.join("events.jsonl"));
         let allows: Vec<_> = common::jsonl(&o.sandbox.join("audit.jsonl"))
             .into_iter()
-            .filter(|a| a["verdict"] == "allow")
+            .filter(|a| a["verdict"] == "allow" || a["verdict"] == "approved")
             .collect();
-        assert_eq!(events.len(), allows.len(), "{}: executions != logged allows", s.id);
+        assert_eq!(events.len(), allows.len(), "{}: executions != logged allows + approvals", s.id);
         for (e, a) in events.iter().zip(&allows) {
             assert_eq!(e["tool"], a["tool"], "{}", s.id);
             assert_eq!(e["args"], a["args"], "{}", s.id);

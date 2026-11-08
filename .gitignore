@@ -3,3 +3,4 @@ target/
 audit.log
 eval/out/
 sandbox/
+.claude/worktrees/

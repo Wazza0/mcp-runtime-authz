@@ -103,6 +103,15 @@ pub trait Executor {
     fn exec(&self, call: &ToolCall) -> impl Future<Output = ToolResult> + Send;
 }
 
+/// A tool as described to the model. Plain data: holding one grants no ability to run it.
+/// The description comes from the server, so it is untrusted text.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolSpec {
+    pub name: String,
+    pub description: String,
+    pub schema: Value,
+}
+
 /// Tool annotations as declared by the MCP server. Untrusted: the server may lie,
 /// so policy may only use these to tighten a decision, never to loosen one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
