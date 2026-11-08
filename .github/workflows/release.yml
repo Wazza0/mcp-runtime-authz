@@ -48,11 +48,20 @@ jobs:
           else shasum -a 256 "$asset" > "$asset.sha256"; fi
           echo "ASSET=$asset" >> "$GITHUB_ENV"
       - name: Sign build provenance
+        id: attest
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: ${{ env.ASSET }}
+      # Also ship the signed bundle as a release asset, so it can be verified offline and
+      # tools that look for signatures next to the download (e.g. OpenSSF Scorecard) find it.
+      - name: Attach provenance bundle
+        shell: bash
+        env:
+          BUNDLE: ${{ steps.attest.outputs.bundle-path }}
+        run: cp "$BUNDLE" "$ASSET.sigstore.json"
       - uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
           files: |
             ${{ env.ASSET }}
             ${{ env.ASSET }}.sha256
+            ${{ env.ASSET }}.sigstore.json

@@ -21,13 +21,23 @@ case that shows one is worse than described is still useful.
 
 ## How to report
 
-Please report privately using GitHub's **Report a vulnerability** button on the repository's
-Security tab, rather than opening a public issue. Include the policy, the tool call (or MCP
-request) and what you expected the guard to do.
+Please report privately through GitHub's private vulnerability reporting:
+**https://github.com/Wazza0/mcp-runtime-authz/security/advisories/new**
+(or the **Report a vulnerability** button on the Security tab), rather than opening a public
+issue. Include the policy, the tool call (or MCP request) and what you expected the guard to do.
 
-This is a solo project, so please allow some time for a response. Fixes land on `master` with a
-regression test, and reporters are credited in the commit unless they prefer not to be.
+## What happens next
+
+This follows coordinated disclosure:
+
+1. The report is acknowledged and reproduced privately.
+2. A fix is developed with a regression test that fails before it and passes after.
+3. A patched release is published, with a GitHub security advisory describing the issue.
+4. Reporters are credited in the advisory and the commit, unless they prefer not to be.
+
+This is a solo project, so please allow some time for a response, and please don't disclose
+publicly until a fix is released.
 
 ## Supported versions
 
-Only the latest `master` is supported.
+Only the latest release and `master` receive security fixes.
