@@ -1,0 +1,8 @@
+# Least-privilege policy. Unlisted tools fall to `default`.
+# M1: static allowlist only. Context-aware rules arrive in M2.
+default: deny
+tools:
+  fs_read: allow
+  http_fetch: allow
+  email_send: allow
+  shell_run: allow

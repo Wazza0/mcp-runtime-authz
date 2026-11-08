@@ -1,9 +1,11 @@
-//! MCP client over stdio to the tool server. Raw execution, no policy.
+//! MCP client over stdio to the tool server.
+//! Execution is crate-private and needs an Authorization, so outside this crate
+//! the only way to run a tool is the Interceptor. Proven by tests/ui/bypass_exec.rs.
 
 use std::path::Path;
 
 use anyhow::{Context as _, Result};
-use authz_core::{Executor, ToolCall, ToolResult};
+use authz_core::ToolResult;
 use rmcp::{
     RoleClient, ServiceExt,
     model::CallToolRequestParams,
@@ -11,6 +13,8 @@ use rmcp::{
     transport::TokioChildProcess,
 };
 use tokio::process::Command;
+
+use crate::token::Authorization;
 
 /// Tools whose output originates outside the trust boundary.
 const UNTRUSTED: &[&str] = &["http_fetch", "fs_read"];
@@ -41,7 +45,8 @@ impl Mcp {
         Ok(())
     }
 
-    pub(crate) async fn raw(&self, call: &ToolCall) -> ToolResult {
+    pub(crate) async fn exec(&self, auth: Authorization) -> ToolResult {
+        let call = auth.call();
         let req = CallToolRequestParams::new(call.tool.clone()).with_arguments(call.args.clone());
         let text = match self.svc.call_tool(req).await {
             Ok(r) => r
@@ -57,12 +62,5 @@ impl Mcp {
         } else {
             ToolResult::trusted(text)
         }
-    }
-}
-
-/// M0 only: unguarded direct execution. Replaced by the interceptor in M1.
-impl Executor for Mcp {
-    async fn exec(&self, call: &ToolCall) -> ToolResult {
-        self.raw(call).await
     }
 }

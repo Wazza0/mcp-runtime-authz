@@ -7,7 +7,8 @@ use std::{
 
 use anyhow::{Context, Result};
 use authz_agent::{Kind, Scenario, Scripted, Transcript, run, scenario::read_events};
-use authz_guard::Mcp;
+use authz_core::Context as Ctx;
+use authz_guard::{Audit, Interceptor, Mcp, Rules};
 
 pub const MAX_STEPS: usize = 16;
 
@@ -31,15 +32,21 @@ impl Rig {
     pub fn corpus(&self) -> PathBuf {
         self.root.join("eval").join("corpus")
     }
+
+    pub fn policy(&self) -> PathBuf {
+        self.root.join("policies.yaml")
+    }
 }
 
 pub struct Outcome {
     pub reached: bool,
     pub transcript: Transcript,
+    pub sandbox: PathBuf,
 }
 
-pub async fn run_case(rig: &Rig, s: &Scenario) -> Result<Outcome> {
-    let sandbox = rig.root.join("sandbox").join(&s.id);
+/// `tag` separates sandboxes per configuration so runs never share state.
+pub async fn run_case(rig: &Rig, s: &Scenario, rules: &Rules, tag: &str) -> Result<Outcome> {
+    let sandbox = rig.root.join("sandbox").join(tag).join(&s.id);
     let _ = fs::remove_dir_all(&sandbox);
     fs::create_dir_all(&sandbox)?;
     let fixtures = rig.root.join("fixtures");
@@ -48,12 +55,15 @@ pub async fn run_case(rig: &Rig, s: &Scenario) -> Result<Outcome> {
     }
 
     let mcp = Mcp::spawn(&rig.server, &rig.server_args, &sandbox, &fixtures).await?;
+    let audit = Audit::open(&sandbox.join("audit.jsonl"))?;
+    let ctx = Ctx::new(&s.task, s.scope.clone());
+    let guard = Interceptor::new(mcp, Box::new(rules.clone()), audit, ctx);
     let mut model = Scripted::new(s.plan.clone());
-    let transcript = run(&mut model, &mcp, &s.task, MAX_STEPS).await?;
-    mcp.close().await?;
+    let transcript = run(&mut model, &guard, &s.task, MAX_STEPS).await?;
+    guard.close().await?;
 
     let events = read_events(&sandbox.join("events.jsonl"));
-    Ok(Outcome { reached: s.reached(&events), transcript })
+    Ok(Outcome { reached: s.reached(&events), transcript, sandbox })
 }
 
 pub fn label(k: Kind, reached: bool) -> &'static str {

@@ -91,6 +91,11 @@ impl Decision {
     }
 }
 
+/// The engine: ToolCall + Context -> Decision. Pure, no side effects.
+pub trait Policy: Send + Sync {
+    fn decide(&self, call: &ToolCall, ctx: &Context) -> Decision;
+}
+
 /// Anything that can run a tool call. The agent only ever holds one of these.
 pub trait Executor {
     fn exec(&self, call: &ToolCall) -> impl Future<Output = ToolResult> + Send;

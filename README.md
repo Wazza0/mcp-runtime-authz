@@ -10,19 +10,31 @@ tool call is checked against least-privilege policy *before* it runs
 | --- | --- |
 | `authz-core` | `ToolCall`, `Context`, `Decision`, `Executor` |
 | `authz-tools` | MCP tool server: `fs_read`, `http_fetch`, `email_send`, `shell_run` (all simulated) |
-| `authz-guard` | MCP client; interceptor + policy + audit (M1+) |
+| `authz-guard` | MCP client, interceptor, policy engine, audit log |
 | `authz-agent` | agent loop and model backends. **No dependency on the tool client**: it can only act through the `Executor` it is handed |
 | `authz-cli` | `authz` binary: wiring, corpus runs, eval |
 
+## The boundary is enforced by the compiler
+
+The handoff rule is that the interceptor is the *only* path to execution. That holds structurally:
+
+1. `authz-agent` has no dependency on the tool client or server (`tests/boundary.rs`).
+2. `Mcp::exec` is crate-private, so outside `authz-guard` the only executor is `Interceptor` (`tests/ui/bypass_exec.rs`, E0624).
+3. `Mcp::exec` takes an `Authorization` by value. It is bound to one call, single-use, and only `token::authorize` can mint one, and only on a policy `Allow` (`tests/ui/forge_token.rs`, E0451).
+4. The interceptor writes the decision to `audit.jsonl` *before* executing, and fails closed if the log write fails.
+
+The unguarded baseline is `Rules::permit_all()`: the same code path with an explicit allow-everything policy, still audited.
+
 `fixtures/` holds the offline web pages and files the tools serve. `eval/corpus/` holds
-attack and benign cases. Every side effect is appended to `sandbox/<case>/events.jsonl`
+attack and benign cases. Every side effect is appended to `sandbox/<mode>/<case>/events.jsonl` (decisions in `audit.jsonl` beside it)
 and nothing is sent, fetched or executed for real.
 
 ## Run
 
 ```sh
 cargo build --workspace
-cargo run -p authz-cli --bin authz -- run          # whole corpus
+cargo run -p authz-cli --bin authz -- run                # whole corpus, policies.yaml
+cargo run -p authz-cli --bin authz -- run --unguarded    # permit-all baseline
 cargo run -p authz-cli --bin authz -- run eval/corpus/atk-01-web-exfil.json -v
 cargo test --workspace
 ```
@@ -30,7 +42,7 @@ cargo test --workspace
 ## Status
 
 - [x] **M0** bare agent, no guard: benign tasks complete, 3/3 seed attacks reproduce
-- [ ] M1 interceptor + allowlist + audit
+- [x] **M1** interceptor + allowlist + audit: every execution has a prior logged allow; denying a tool blocks it
 - [ ] M2 context-aware policy
 - [ ] M3 escalation
 - [ ] M4 taint tracking

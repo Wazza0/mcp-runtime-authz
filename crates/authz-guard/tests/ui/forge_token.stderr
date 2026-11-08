@@ -1,0 +1,5 @@
+error[E0451]: field `call` of struct `Authorization` is private
+ --> tests/ui/forge_token.rs:4:49
+  |
+4 |     let _ = authz_guard::token::Authorization { call };
+  |                                                 ^^^^ private field

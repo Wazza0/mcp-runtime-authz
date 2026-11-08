@@ -1,0 +1,10 @@
+error[E0624]: method `exec` is private
+ --> tests/ui/bypass_exec.rs:3:15
+  |
+3 |     let _ = m.exec(c).await;
+  |               ^^^^ private method
+  |
+ ::: src/mcp.rs
+  |
+  |     pub(crate) async fn exec(&self, auth: Authorization) -> ToolResult {
+  |     ------------------------------------------------------------------ private method defined here
