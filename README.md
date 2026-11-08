@@ -205,7 +205,7 @@ From v0.2.0, release archives carry signed build provenance, so you can check th
 built by this repository's release workflow from its source:
 
 ```sh
-gh attestation verify authz-v0.2.0-x86_64-unknown-linux-gnu.tar.gz --repo Wazza0/mcp-runtime-authz
+gh attestation verify authz-v0.2.1-x86_64-unknown-linux-gnu.tar.gz --repo Wazza0/mcp-runtime-authz
 ```
 
 ## How this project secures itself
