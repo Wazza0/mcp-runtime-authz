@@ -6,3 +6,7 @@ sandbox/
 .claude/worktrees/
 .cargo/config.toml
 authz-audit.jsonl
+fuzz/target/
+fuzz/corpus/
+fuzz/artifacts/
+fuzz/coverage/

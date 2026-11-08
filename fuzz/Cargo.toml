@@ -1,0 +1,40 @@
+[package]
+name = "authz-fuzz"
+version = "0.0.0"
+edition = "2024"
+publish = false
+license = "MIT OR Apache-2.0"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4.13"
+authz-core = { path = "../crates/authz-core" }
+authz-guard = { path = "../crates/authz-guard" }
+serde_json = "1"
+
+# Its own workspace, so the main build never needs libFuzzer.
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "decode"
+path = "fuzz_targets/decode.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "policy"
+path = "fuzz_targets/policy.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "decide"
+path = "fuzz_targets/decide.rs"
+test = false
+doc = false
+bench = false
