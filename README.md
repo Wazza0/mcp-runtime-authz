@@ -176,3 +176,8 @@ if the injected text reached it. `ollama` runs a real local model (default `qwen
 
 **History.** Built in milestones M0 to M5 (bare agent, interceptor, context-aware policy,
 escalation, taint tracking, evaluation), then refocused into a proxy for real MCP servers.
+
+## License
+
+Dual-licensed under [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option.
+Found a way past the guard? See [SECURITY.md](SECURITY.md).
