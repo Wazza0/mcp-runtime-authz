@@ -1,0 +1,38 @@
+{
+  "retrieved": "2026-11-08",
+  "sources": {
+    "asi": {
+      "edition": "2026",
+      "url": "https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/",
+      "document": "OWASP Top 10 For Agentic Applications 2026, Version 2026, December 2025 (PDF from the URL above), table of contents"
+    },
+    "llm": {
+      "edition": "2025",
+      "url": "https://genai.owasp.org/llm-top-10/"
+    }
+  },
+  "asi": {
+    "ASI01": "Agent Goal Hijack",
+    "ASI02": "Tool Misuse and Exploitation",
+    "ASI03": "Identity and Privilege Abuse",
+    "ASI04": "Agentic Supply Chain Vulnerabilities",
+    "ASI05": "Unexpected Code Execution (RCE)",
+    "ASI06": "Memory & Context Poisoning",
+    "ASI07": "Insecure Inter-Agent Communication",
+    "ASI08": "Cascading Failures",
+    "ASI09": "Human-Agent Trust Exploitation",
+    "ASI10": "Rogue Agents"
+  },
+  "llm": {
+    "LLM01": "Prompt Injection",
+    "LLM02": "Sensitive Information Disclosure",
+    "LLM03": "Supply Chain",
+    "LLM04": "Data and Model Poisoning",
+    "LLM05": "Improper Output Handling",
+    "LLM06": "Excessive Agency",
+    "LLM07": "System Prompt Leakage",
+    "LLM08": "Vector and Embedding Weaknesses",
+    "LLM09": "Misinformation",
+    "LLM10": "Unbounded Consumption"
+  }
+}
