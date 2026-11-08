@@ -20,8 +20,12 @@ pub struct Interceptor {
     catalog: Vec<ToolSpec>,
 }
 
-fn blocked(d: &Decision, extra: &str) -> ToolResult {
-    ToolResult::new(format!("BLOCKED [{}]: {}{extra}", d.rule(), d.reason()))
+/// What the agent sees. Deliberately says nothing about which rule fired or why:
+/// that detail would let injected instructions probe the policy and retry around it.
+/// Humans read the reason in the audit log via the reference.
+fn blocked(seq: Option<u64>, what: &str) -> ToolResult {
+    let r = seq.map(|n| format!(" (audit #{n})")).unwrap_or_default();
+    ToolResult::new(format!("BLOCKED: {what}{r}"))
 }
 
 fn describe(call: &ToolCall) -> String {
@@ -29,8 +33,8 @@ fn describe(call: &ToolCall) -> String {
     format!("{} {}", call.tool, first.chars().take(80).collect::<String>())
 }
 
-fn audit_down(e: std::io::Error) -> ToolResult {
-    blocked(&Decision::block("audit", format!("audit log unavailable: {e}")), "")
+fn audit_down(_: std::io::Error) -> ToolResult {
+    blocked(None, "the decision could not be recorded, so the action was not run")
 }
 
 impl Interceptor {
@@ -72,8 +76,8 @@ impl Executor for Interceptor {
                 a
             }
             Err(Refusal::Blocked(d)) => {
-                let _ = self.audit.record(call, &d, "not executed");
-                return blocked(&d, "");
+                let seq = self.audit.record(call, &d, "not executed").ok();
+                return blocked(seq, "this action is not permitted by policy");
             }
             Err(Refusal::Pending(esc)) => {
                 let d = esc.decision().clone();
@@ -81,12 +85,13 @@ impl Executor for Interceptor {
                     return audit_down(e);
                 }
                 let a = self.approver.review(call, &d);
-                if let Err(e) = self.audit.answer(call, &d, a.granted, &a.by) {
-                    return audit_down(e);
-                }
+                let seq = match self.audit.answer(call, &d, a.granted, &a.by) {
+                    Ok(n) => n,
+                    Err(e) => return audit_down(e),
+                };
                 match approve(esc, &a) {
                     Ok(auth) => auth,
-                    Err(d) => return blocked(&d, &format!(" (denied by {})", a.by)),
+                    Err(_) => return blocked(Some(seq), "a reviewer declined this action"),
                 }
             }
         };

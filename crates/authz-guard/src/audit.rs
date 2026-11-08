@@ -23,7 +23,7 @@ impl Audit {
     }
 
     /// Persist a policy decision. Callers must not act if this fails.
-    pub fn record(&self, call: &ToolCall, d: &Decision, note: &str) -> io::Result<()> {
+    pub fn record(&self, call: &ToolCall, d: &Decision, note: &str) -> io::Result<u64> {
         let v = match d {
             Decision::Allow => "allow",
             Decision::Block { .. } => "block",
@@ -33,11 +33,12 @@ impl Audit {
     }
 
     /// Persist a human's answer to an escalation.
-    pub fn answer(&self, call: &ToolCall, d: &Decision, granted: bool, by: &str) -> io::Result<()> {
+    pub fn answer(&self, call: &ToolCall, d: &Decision, granted: bool, by: &str) -> io::Result<u64> {
         self.write(call, if granted { "approved" } else { "denied" }, d, &format!("by {by}"))
     }
 
-    fn write(&self, call: &ToolCall, verdict: &str, d: &Decision, note: &str) -> io::Result<()> {
+    /// Returns the record's sequence number.
+    fn write(&self, call: &ToolCall, verdict: &str, d: &Decision, note: &str) -> io::Result<u64> {
         let mut g = self.f.lock().map_err(|_| io::Error::other("audit poisoned"))?;
         g.1 += 1;
         let ts = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0);
@@ -46,6 +47,7 @@ impl Audit {
             "verdict": verdict, "rule": d.rule(), "also": d.also(), "reason": d.reason(), "note": note,
         });
         writeln!(g.0, "{line}")?;
-        g.0.sync_data()
+        g.0.sync_data()?;
+        Ok(g.1)
     }
 }
