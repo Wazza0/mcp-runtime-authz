@@ -53,7 +53,7 @@ work, not as proof they generalise.
 
 ## What broke
 
-This is the part I'd actually want to read in someone else's post. I found four real bypasses in
+This is the part I'd actually want to read in someone else's post. I found six real bypasses in
 my own guard. Each one is fixed and has a regression test.
 
 **1. A whole file counted as "just a reference."** Taint tracking stops private data you read
@@ -80,6 +80,18 @@ server. Reading `.env` directly: blocked. Reading notes plus `.env` in one `read
 call: **the secret came straight back.** That tool takes its paths as a list, and my rules only
 inspected plain string values. My own test server only ever takes strings, so the gap was
 invisible until a real server exercised it.
+
+**5. Windows paths walked straight past the filesystem policy.** The rule matched path separators
+with `[\\/]`. When the file was written, a shell quietly collapsed that to `[\/]`, which matches
+forward slashes only, so `C:\p\.env` was allowed. Nothing failed: the policy still loaded, and every
+test on Unix-style paths still passed. The fix was one character; the lesson was that the tooling
+around a security config can weaken it without anyone noticing, so the regression test now uses a
+Windows path.
+
+**6. A URL's login part posed as its host.** In `http://allowed.test:x@evil.test/`, everything
+before the `@` is a username and password, and the real host is `evil.test`. My host check read it
+as `allowed.test` and let it through. Hosts are now parsed properly, and where URL parsers could
+disagree about the host, every possible reading must be on the allow list.
 
 ## What I took away from it
 
