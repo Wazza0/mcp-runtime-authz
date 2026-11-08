@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640" width="1280" height="640">
+  <style>
+    .f { font-family: system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
+    .m { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 23px; }
+    .p { fill: #f0efec; } .s { fill: #c3c2b7; } .u { fill: #898781; }
+  </style>
+  <rect width="1280" height="640" fill="#1a1a19"/>
+
+  <g transform="translate(96 132) scale(1.45)">
+    <path d="M60 8 L104 24 V58 C104 86 84 104 60 112 C36 104 16 86 16 58 V24 Z" fill="#2a78d6"/>
+    <path d="M60 8 L104 24 V58 C104 86 84 104 60 112" fill="#256abf"/>
+    <g fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M32 60 H60"/><path d="M50 49 L61 60 L50 71"/><path d="M76 40 V80"/>
+    </g>
+  </g>
+  <text x="290" y="212" class="f p" font-size="64" font-weight="600">mcp-runtime-authz</text>
+  <text x="292" y="268" class="f s" font-size="30">Stop your AI agent leaking secrets through its tools.</text>
+
+  <rect x="96" y="336" width="1088" height="188" rx="16" fill="#0d0d0d" stroke="rgba(255,255,255,0.10)"/>
+  <g fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M126 373 l11 11 M137 373 l-11 11" stroke="#d03b3b"/>
+    <path d="M126 425 l11 11 M137 425 l-11 11" stroke="#d03b3b"/>
+    <path d="M125 482 l5 5 l9 -10" stroke="#0ca30c"/>
+  </g>
+  <text x="156" y="387" class="m p" font-weight="700">block</text>
+  <text x="260" y="387" class="m p">read_multiple_files</text>
+  <text x="560" y="387" class="m p">notes.md, .env</text>
+  <text x="884" y="387" class="m s">sensitive-read</text>
+  <text x="156" y="439" class="m p" font-weight="700">block</text>
+  <text x="260" y="439" class="m p">write_file</text>
+  <text x="560" y="439" class="m p">.git/hooks/pre-commit</text>
+  <text x="884" y="439" class="m s">runs-later-write</text>
+  <text x="156" y="491" class="m p">allow</text>
+  <text x="260" y="491" class="m p">read_text_file</text>
+  <text x="560" y="491" class="m p">notes.md</text>
+
+  <text x="96" y="590" class="f u" font-size="24">A firewall for MCP tool calls · Rust · open source · tested against real servers</text>
+</svg>

@@ -14,6 +14,7 @@
   <a href="https://github.com/Wazza0/mcp-runtime-authz/releases/latest"><img src="https://img.shields.io/github/v/release/Wazza0/mcp-runtime-authz" alt="Latest release"></a>
   <a href="#license"><img src="https://img.shields.io/badge/license-MIT%20%2F%20Apache--2.0-blue" alt="License: MIT or Apache-2.0"></a>
   <a href="https://modelcontextprotocol.io/specification/2026-07-28"><img src="https://img.shields.io/badge/MCP-2026--07--28-2a78d6" alt="MCP spec 2026-07-28"></a>
+  <a href="https://scorecard.dev/viewer/?uri=github.com/Wazza0/mcp-runtime-authz"><img src="https://api.scorecard.dev/projects/github.com/Wazza0/mcp-runtime-authz/badge" alt="OpenSSF Scorecard"></a>
 </p>
 
 <p align="center">
@@ -40,21 +41,37 @@
   URL, an email body or a subdomain ([taint tracking](#design-notes)).
 - **Blocks code planted to run later:** writes to git hooks, CI workflows, editor tasks and shell
   rc files.
+- **Notices when a server changes its tools after you've trusted them.** A changed tool is hidden
+  from the agent and refused until you accept it ([tool pinning](#tool-pinning)).
 - **Logs every decision before it runs.** The agent only ever sees `BLOCKED`, never which rule
   fired, so it can't probe its way around the policy.
 - **Nothing can skip the check.** The Rust compiler enforces it, and tests pin it.
-- **Works with any stdio MCP server**, with [prebuilt binaries](https://github.com/Wazza0/mcp-runtime-authz/releases/latest)
-  for Linux, macOS and Windows.
+- **Drafts a policy for any server** with `authz init`, and works with any stdio MCP server, with
+  [prebuilt binaries](https://github.com/Wazza0/mcp-runtime-authz/releases/latest) for Linux, macOS
+  and Windows.
 
 ## Quick start
 
-Download the archive for your platform from
+**1. Install.** Download the archive for your platform from
 [Releases](https://github.com/Wazza0/mcp-runtime-authz/releases/latest) (each includes the starter
-policies and a `.sha256` checksum), or build from source with `cargo build --release`. Then wrap a
-server:
+policies, a `.sha256` checksum and [signed build provenance](#verify-a-download)), or install with
+Cargo:
 
 ```sh
-authz proxy --policy policies/filesystem.yaml --audit audit.jsonl \
+cargo install --git https://github.com/Wazza0/mcp-runtime-authz --locked authz-cli
+```
+
+**2. Get a policy.** Use a [starter policy](#starter-policies), or draft one from the server's own
+tool list and review it:
+
+```sh
+authz init --out my-policy.yaml -- <your mcp server command>
+```
+
+**3. Wrap the server.**
+
+```sh
+authz proxy --policy policies/filesystem.yaml --audit audit.jsonl --pin tools.lock \
   -- npx -y @modelcontextprotocol/server-filesystem /path/to/project
 ```
 
@@ -67,6 +84,7 @@ Desktop's or Cursor's config (on Windows use `npx.cmd`):
     "files": {
       "command": "/path/to/authz",
       "args": ["proxy", "--policy", "/path/to/policies/filesystem.yaml", "--audit", "/path/to/audit.jsonl",
+               "--pin", "/path/to/tools.lock",
                "--", "npx", "-y", "@modelcontextprotocol/server-filesystem", "/path/to/project"]
     }
   }
@@ -74,6 +92,8 @@ Desktop's or Cursor's config (on Windows use `npx.cmd`):
 ```
 
 See what happened at any time with `authz audit audit.jsonl`.
+
+### Starter policies
 
 | starter policy | wraps | what it adds |
 | --- | --- | --- |
@@ -139,9 +159,12 @@ The story behind each is in the [write-up](report/writeup.md).
 
 ## Writing a policy
 
-Policies are YAML data; the engine is generic. Start from
-[`example-proxy.yaml`](policies/example-proxy.yaml):
+Policies are YAML data; the engine is generic. Start from `authz init`, a
+[starter policy](#starter-policies), or [`example-proxy.yaml`](policies/example-proxy.yaml):
 
+- **`authz init` drafts, you decide.** It classifies each tool from its name, arguments and the
+  server's hints, and adds the rules that fit. When unsure it fails safe: tools it can't classify,
+  and tools the server calls destructive, start refused, with a comment saying so.
 - **The `allow` list is your trust anchor.** The proxy never sees what you typed, so hosts, email
   recipients and shell commands are permitted only if the policy lists them.
 - **List each tool the server exposes** under `tools:` with a risk class (`read`, `write`,
@@ -150,6 +173,41 @@ Policies are YAML data; the engine is generic. Start from
   prompt you; an escalated call is refused and logged. `--approve allow` turns them into allows.
 - **Malformed policies are rejected:** duplicate keys, unknown fields, bad patterns, and rules that
   could never fire all fail at load.
+
+## Tool pinning
+
+A tool's description is text your agent reads as instructions, so a server that edits it after you
+start trusting it (or quietly adds a tool) can steer the agent. With `--pin tools.lock`, the first
+run records a fingerprint of every tool: its name, description, argument schema and annotations.
+After that, a tool that changed or appeared is **left out of the tool list**, so its new
+description never reaches the agent, and is **refused** if called anyway. The change is reported
+on stderr and in the audit log. Review it, then run once with `--repin` to accept it.
+
+## Verify a download
+
+From v0.2.0, release archives carry signed build provenance, so you can check that a download was
+built by this repository's release workflow from its source:
+
+```sh
+gh attestation verify authz-v0.2.0-x86_64-unknown-linux-gnu.tar.gz --repo Wazza0/mcp-runtime-authz
+```
+
+## How this project secures itself
+
+A security tool should hold itself to the standard it enforces. On every push, CI:
+
+- **checks every dependency** against the RustSec advisory database, and limits licenses and
+  sources ([`deny.toml`](deny.toml));
+- **fuzzes** the argument decoder, the policy loader and the full decision path
+  ([`fuzz/`](fuzz/)), and runs property tests, e.g. that a secret in any supported encoding never
+  leaves;
+- **scans the code and the workflows** with CodeQL;
+- **lints with warnings as errors** and runs the full test suite, including the compile-time
+  bypass checks.
+
+All CI actions are pinned to exact commits, Dependabot keeps them and the dependencies patched,
+`master` is protected against force-pushes, and the [OpenSSF Scorecard](https://scorecard.dev/viewer/?uri=github.com/Wazza0/mcp-runtime-authz)
+grades the setup publicly. Report a vulnerability privately via [SECURITY.md](SECURITY.md).
 
 ## Limitations
 
@@ -165,7 +223,7 @@ More in [report/findings.md](report/findings.md#limitations). How this compares 
 <summary><b>Tests and evaluation</b></summary>
 
 ```sh
-cargo test --workspace                       # milestone gates, proxy, compile-time guarantees
+cargo test --workspace                       # milestone gates, proxy, pinning, init, properties, compile-time guarantees
 cargo test -p authz-cli --test proxy_filesystem -- --ignored   # against the real server (needs Node)
 
 cargo run --release -p authz-cli --bin authz -- eval --ablation          # scripted agent + per-rule ablation
@@ -191,7 +249,7 @@ pinned from official sources in `eval/frameworks/` and checked by `tests/refs.rs
 | `authz-guard` | the `Gate`, policy engine, inspection, taint, audit log, MCP client, and the two front ends: in-process `Interceptor` and stdio `Proxy` |
 | `authz-tools` | a simulated MCP tool server for the evaluation: nothing is sent, fetched or executed |
 | `authz-agent` | agent loop and model backends; **no dependency on the tool client**, so it can only act through what it's handed |
-| `authz-cli` | the `authz` binary: `proxy`, `audit`, `run`, `eval`, `serve-tools` |
+| `authz-cli` | the `authz` binary: `proxy`, `init`, `audit`, `run`, `eval`, `serve-tools` |
 
 **The boundary, structurally.** `authz-agent` cannot name the tool client (`tests/boundary.rs`).
 Execution is crate-private (`tests/ui/bypass_exec.rs`, E0624) and consumes an `Authorization` that
