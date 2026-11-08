@@ -1,0 +1,79 @@
+# Starter policy for the official git server:
+#   authz proxy --policy policies/git.yaml -- uvx mcp-server-git --repository <dir>
+#
+# The server already confines repo_path to <dir> and refuses revisions that look
+# like options. This adds what it can't know: which files are credentials, and
+# that secrets don't belong in a commit.
+#
+# Destructive operations: this server has no push, hard reset, clean, branch
+# delete or forced checkout. The one tool it marks destructive, git_reset, only
+# unstages: the index goes back to HEAD and files and commits are untouched. It
+# is also how a bad git_add gets undone, so it stays allowed. A tool added by a
+# later version of the server falls to `default: deny` until you list it here.
+#
+# Limits: the policy sees the paths the agent passes, not what git expands them
+# to. It refuses `.`, globs and pathspec magic, but a directory still stages
+# everything under it, git_commit records whatever is already staged, and
+# git_show of a commit prints its whole diff. Keep credentials in .gitignore too.
+default: deny
+
+tools:
+  git_status:        {action: allow, class: read}
+  git_diff_unstaged: {action: allow, class: read}
+  git_diff_staged:   {action: allow, class: read}
+  git_diff:          {action: allow, class: read}
+  git_log:           {action: allow, class: read}
+  git_show:          {action: allow, class: read}
+  git_branch:        {action: allow, class: read}
+  git_remote:        {action: allow, class: read}
+  git_add:           {action: allow, class: write}
+  git_commit:        {action: allow, class: write}
+  git_reset:         {action: allow, class: write}   # unstages only; see above
+  git_create_branch: {action: allow, class: write}
+  git_checkout:      {action: allow, class: write}
+  git_merge:         {action: allow, class: write}   # the server refuses a dirty tree and aborts conflicts
+
+patterns:
+  secret:
+    - 'sk-(live|test|proj)-[A-Za-z0-9_-]{8,}'
+    - 'AKIA[0-9A-Z]{16}'
+    - '(?i)aws_secret_access_key'
+    - 'gh[pousr]_[A-Za-z0-9]{20,}'
+    - '-----BEGIN [A-Z ]*PRIVATE KEY-----'
+  sensitive_path:                      # filesystem.yaml's, case-insensitive, with `:` for git_show's <rev>:<path>
+    - '(?i)(^|[\\/:])\.env(\.[^\\/]*)?$'
+    - '(?i)\.(pem|key|p12|pfx)$'
+    - '(?i)(^|[\\/:])id_(rsa|ed25519|ecdsa)'
+    - '(?i)(^|[\\/:])\.ssh([\\/]|$)'
+    - '(?i)(^|[\\/:])\.aws[\\/]credentials$'
+    - '(?i)(^|[\\/:])\.(npmrc|pypirc|netrc)$'
+  sweeping_path:                       # pathspecs that stage files nobody named
+    - '^\s*:'                          # magic: `:/` is the whole tree, `:(literal).env` hides a name
+    - '[*?\[\\]'                       # globs: `[.]env` is .env, and off Windows so is `.e\nv`. Use `/`.
+    - '(^|/)\.\.?/*$'                  # `.`, `..`, `src/..`
+
+rules:
+  - id: sensitive-stage                # credential files stay out of the index
+    action: deny
+    tool: git_add
+    when: [{arg_matches: {arg: files, set: sensitive_path}}]
+
+  - id: sweeping-stage                 # stage files by name, so the rule above can see them
+    action: deny
+    tool: git_add
+    when: [{arg_matches: {arg: files, set: sweeping_path}}]
+
+  - id: secret-write                   # no secrets in commit messages or branch names
+    action: deny
+    class: write
+    when: [{any_arg_matches: {set: secret}}]
+
+  - id: sensitive-read                 # e.g. git_show HEAD:.env, a credential committed by mistake
+    action: deny
+    class: read
+    when: [{any_arg_matches: {set: sensitive_path}}]
+
+  - id: hint-disagrees                 # server says a read is destructive: believe it
+    action: escalate
+    class: read
+    when: [{hint: destructive}]

@@ -1,0 +1,67 @@
+# Starter policy for the official fetch server:
+#   authz proxy --policy policies/fetch.yaml -- uvx mcp-server-fetch --allowed-hosts example.com example.org
+#
+# A fetch tool reaches whatever this machine can, including services that were
+# never meant to face the internet. This lets it read only the hosts you list,
+# keeps credentials out of URLs, and refuses loopback, private and link-local
+# (cloud metadata) addresses even if one of them is listed.
+#
+# Edit `allow.hosts`, and `--allowed-hosts` to match: example.com and example.org
+# are placeholders. Names match exactly, so list www.example.com separately.
+#
+# The proxy sees the URL the agent asks for, not redirects or what a name
+# resolves to. The server checks both on every hop, so keep `--allowed-hosts`
+# in step with `allow.hosts`, and don't pass `--allow-private-ips`.
+default: deny
+
+allow:
+  hosts:                               # placeholders: replace with the hosts you trust
+    - example.com
+    - example.org
+
+tools:
+  fetch: {action: allow, class: egress}   # annotated read-only, yet every call is a request out
+
+patterns:
+  secret:
+    - 'sk-(live|test|proj)-[A-Za-z0-9_-]{8,}'
+    - 'AKIA[0-9A-Z]{16}'
+    - '(?i)aws_secret_access_key'
+    - 'gh[pousr]_[A-Za-z0-9]{20,}'
+    - '-----BEGIN [A-Z ]*PRIVATE KEY-----'
+  url_credential:
+    # user:password@host. Also how https://example.com:x@evil.test/ passes evil.test off as example.com.
+    - '(?i)^\s*[a-z][a-z0-9+.-]*://[^/?#]*@'
+    - '(?i)[?&;](access_token|api[_-]?key|auth|client_secret|key|passw(or)?d|pwd|secret|token)=[^&#]'
+  internal_host:                       # the URL's host, with or without user@ in front
+    # localhost, *.localhost, *.internal (metadata.google.internal), *.local
+    - '(?i)^\s*[a-z][a-z0-9+.-]*://([^/?#]*@)?([^/?#@:]*\.)?(localhost|internal|local)\.?([:/?#\\]|$)'
+    # 127/8, 10/8, 172.16/12, 192.168/16, 169.254/16 (169.254.169.254 is cloud metadata), 0/8
+    - '(?i)^\s*[a-z][a-z0-9+.-]*://([^/?#]*@)?(127\.\d+|10\.\d+|172\.(1[6-9]|2\d|3[01])|192\.168|169\.254|0+\.\d+)\.\d+\.\d+\.?([:/?#\\]|$)'
+    # IPv4 in disguise: 2130706433, 127.1, 0x7f000001 (fewer than four parts) ...
+    - '(?i)^\s*[a-z][a-z0-9+.-]*://([^/?#]*@)?(\d+|0x[0-9a-f]*)(\.(\d+|0x[0-9a-f]*)){0,2}\.?([:/?#\\]|$)'
+    # ... and 0177.0.0.1, 0x7f.0.0.1 (octal or hex parts)
+    - '(?i)^\s*[a-z][a-z0-9+.-]*://([^/?#]*@)?((\d+|0x[0-9a-f]*)\.)*(0x[0-9a-f]*|0\d+)(\.(\d+|0x[0-9a-f]*))*\.?([:/?#\\]|$)'
+    # [::1], [::], [::ffff:10.0.0.1], [::127.0.0.1], fc00::/7 (AWS's fd00:ec2::254), fe80::/10
+    - '(?i)^\s*[a-z][a-z0-9+.-]*://([^/?#]*@)?\[([0:]*1?\]|[0:]*ffff:|[0:]*\d+\.|f[cd]|fe[89ab])'
+
+rules:
+  - id: internal-host                  # refused even if `allow` lists it
+    action: deny
+    tool: fetch
+    when: [{arg_matches: {arg: url, set: internal_host}}]
+
+  - id: url-credentials                # passwords and tokens don't belong in a URL
+    action: deny
+    tool: fetch
+    when: [{arg_matches: {arg: url, set: url_credential}}]
+
+  - id: secret-egress                  # known key formats anywhere in the call, decoded first
+    action: deny
+    class: egress
+    when: [{any_arg_matches: {set: secret}}]
+
+  - id: unlisted-host                  # only the hosts in `allow`
+    action: deny
+    tool: fetch
+    when: [{arg_not_in_task: {arg: url, kind: host}}]
