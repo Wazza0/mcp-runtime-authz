@@ -13,6 +13,7 @@ use authz_guard::{AllowAll, Approver, Audit, Console, DenyAll, Mcp, Proxy, Rules
 
 const USAGE: &str = "usage: authz proxy --policy <file> [--audit <file>] [--approve deny|allow] \
 -- <mcp-server-command> [args...]
+       authz audit <audit.jsonl>
        authz run [case.json|dir] [-v] [--policy <file> | --unguarded] \
 [--model scripted|ollama] [--approve deny|allow|ask]
        authz eval [--model scripted|ollama] [--approve deny|allow] [--policy <file>] [--ablation] [--out <file>]
@@ -47,6 +48,11 @@ async fn main() -> Result<()> {
     let target = || a.get(1).filter(|x| !x.starts_with('-')).map(PathBuf::from);
     match a.first().map(String::as_str) {
         Some("serve-tools") => authz_tools::serve().await,
+        Some("audit") => {
+            let p = a.get(1).context("usage: authz audit <audit.jsonl>")?;
+            print!("{}", authz_cli::report::audit_table(&fs::read_to_string(p)?));
+            Ok(())
+        }
         Some("proxy") => {
             // Everything after `--` is the downstream server's own command line.
             let split = a.iter().position(|x| x == "--");

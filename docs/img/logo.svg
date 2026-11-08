@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120" role="img" aria-label="mcp-runtime-authz logo: a shield with an arrow stopped at a gate">
+  <path d="M60 8 L104 24 V58 C104 86 84 104 60 112 C36 104 16 86 16 58 V24 Z" fill="#2a78d6"/>
+  <path d="M60 8 L104 24 V58 C104 86 84 104 60 112" fill="#256abf"/>
+  <g fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M32 60 H60"/>
+    <path d="M50 49 L61 60 L50 71"/>
+    <path d="M76 40 V80"/>
+  </g>
+</svg>

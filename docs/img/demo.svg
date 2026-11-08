@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 352" width="880" height="352" role="img" aria-label="Terminal: authz audit after six calls through the proxy to the official filesystem server. Two ran (read notes.md, write todo.md). Four were blocked: reading .env, reading notes.md and .env together, writing config.txt containing a secret, and writing a git hook.">
+  <style>
+    .m { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; font-size: 14px; }
+    .p { fill: #f0efec; } .s { fill: #c3c2b7; } .u { fill: #898781; }
+    .b { font-weight: 700; }
+  </style>
+  <rect x="0.5" y="0.5" width="879" height="351" rx="12" fill="#1a1a19" stroke="rgba(255,255,255,0.10)"/>
+  <circle cx="24" cy="22" r="6" fill="#383835"/><circle cx="44" cy="22" r="6" fill="#383835"/><circle cx="64" cy="22" r="6" fill="#383835"/>
+  <text x="440" y="27" text-anchor="middle" class="m u" style="font-size:12px">real output: the official filesystem server behind authz proxy</text>
+  <line x1="0" y1="44" x2="880" y2="44" stroke="#2c2c2a"/>
+
+  <text x="24" y="76" class="m u">$</text>
+  <text x="40" y="76" class="m p">authz proxy --policy policies/filesystem.yaml --audit audit.jsonl \</text>
+  <text x="72" y="98" class="m p">-- npx -y @modelcontextprotocol/server-filesystem .</text>
+  <text x="24" y="120" class="m u"># your agent makes six tool calls through the proxy...</text>
+  <text x="24" y="146" class="m u">$</text>
+  <text x="40" y="146" class="m p">authz audit audit.jsonl</text>
+
+  <g fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M27 172 l8 8 M35 172 l-8 8" stroke="#d03b3b"/>
+    <path d="M26 201 l3.5 3.5 l6.5 -7" stroke="#0ca30c"/>
+    <path d="M27 220 l8 8 M35 220 l-8 8" stroke="#d03b3b"/>
+    <path d="M26 249 l3.5 3.5 l6.5 -7" stroke="#0ca30c"/>
+    <path d="M27 268 l8 8 M35 268 l-8 8" stroke="#d03b3b"/>
+    <path d="M27 292 l8 8 M35 292 l-8 8" stroke="#d03b3b"/>
+  </g>
+
+  <text x="48" y="181" class="m p b">block</text><text x="128" y="181" class="m p">read_text_file</text><text x="320" y="181" class="m p">.env</text><text x="576" y="181" class="m s">sensitive-read</text>
+  <text x="48" y="205" class="m p">allow</text><text x="128" y="205" class="m p">read_text_file</text><text x="320" y="205" class="m p">notes.md</text>
+  <text x="48" y="229" class="m p b">block</text><text x="128" y="229" class="m p">read_multiple_files</text><text x="320" y="229" class="m p">notes.md, .env</text><text x="576" y="229" class="m s">sensitive-read</text>
+  <text x="48" y="253" class="m p">allow</text><text x="128" y="253" class="m p">write_file</text><text x="320" y="253" class="m p">todo.md</text>
+  <text x="48" y="277" class="m p b">block</text><text x="128" y="277" class="m p">write_file</text><text x="320" y="277" class="m p">config.txt</text><text x="576" y="277" class="m s">secret-write</text>
+  <text x="48" y="301" class="m p b">block</text><text x="128" y="301" class="m p">write_file</text><text x="320" y="301" class="m p">.git/hooks/pre-commit</text><text x="576" y="301" class="m s">runs-later-write</text>
+
+  <text x="24" y="333" class="m p">6 calls: 2 ran, 4 refused</text>
+</svg>

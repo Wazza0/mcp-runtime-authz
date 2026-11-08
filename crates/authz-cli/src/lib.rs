@@ -12,6 +12,7 @@ use authz_core::Context as Ctx;
 use authz_guard::{Approver, Audit, DenyAll, Interceptor, Mcp, Rules};
 
 pub mod eval;
+pub mod report;
 
 pub const MAX_STEPS: usize = 16;
 

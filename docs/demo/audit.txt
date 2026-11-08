@@ -1,0 +1,8 @@
+✕ block     read_text_file        .env                           sensitive-read
+✓ allow     read_text_file        notes.md                       
+✕ block     read_multiple_files   notes.md, .env                 sensitive-read
+✓ allow     write_file            todo.md                        
+✕ block     write_file            config.txt                     secret-write
+✕ block     write_file            .git/hooks/pre-commit          runs-later-write
+
+6 calls: 2 ran, 4 refused

@@ -1,34 +1,57 @@
-# mcp-runtime-authz
+<p align="center">
+  <img src="docs/img/logo.svg" width="96" alt="">
+</p>
 
-[![CI](https://github.com/Wazza0/mcp-runtime-authz/actions/workflows/ci.yml/badge.svg)](https://github.com/Wazza0/mcp-runtime-authz/actions/workflows/ci.yml)
+<h1 align="center">mcp-runtime-authz</h1>
 
-**A firewall for your AI agent's tools.** It sits between an MCP client (Claude Code, Claude
-Desktop, Cursor, …) and the MCP servers it uses, and checks every tool call *before* it runs.
-Small, auditable Rust, built on the official MCP SDK.
+<p align="center">
+  <b>Stop your AI agent leaking secrets through its tools.</b><br>
+  A firewall between MCP clients and the servers they call: every tool call is checked before it runs.
+</p>
 
-```
-MCP client ──▶ authz proxy (policy + audit log) ──▶ the MCP server you already use
-```
+<p align="center">
+  <a href="https://github.com/Wazza0/mcp-runtime-authz/actions/workflows/ci.yml"><img src="https://github.com/Wazza0/mcp-runtime-authz/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/Wazza0/mcp-runtime-authz/releases/latest"><img src="https://img.shields.io/github/v/release/Wazza0/mcp-runtime-authz" alt="Latest release"></a>
+  <a href="#license"><img src="https://img.shields.io/badge/license-MIT%20%2F%20Apache--2.0-blue" alt="License: MIT or Apache-2.0"></a>
+  <a href="https://modelcontextprotocol.io/specification/2026-07-28"><img src="https://img.shields.io/badge/MCP-2026--07--28-2a78d6" alt="MCP spec 2026-07-28"></a>
+</p>
 
-## What it stops
+<p align="center">
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#how-it-works">How it works</a> ·
+  <a href="#does-it-work">Results</a> ·
+  <a href="report/writeup.md">Write-up</a>
+</p>
 
-- **Secrets leaving through tools**, even base64- or percent-encoded, and even when the
-  destination looks legitimate.
-- **Private files being read** (`.env`, keys, `.ssh`, credential files), including when the path
-  is tucked inside a list of other files.
-- **Private data you read this session being sent somewhere you didn't allow** (taint tracking),
-  whether it rides in a URL, an email body or a subdomain.
-- **Code planted to run later:** writes to git hooks, CI workflows, editor tasks, shell rc files.
-- **Destinations and commands you never allowed:** hosts, email recipients, shell commands.
+<p align="center">
+  <img src="docs/img/demo.svg" width="880" alt="Terminal: authz audit after six calls through the proxy to the official filesystem server. Two ran; four were blocked: reading .env, reading notes.md and .env together, writing a secret into config.txt, and writing a git hook.">
+</p>
+<p align="center">
+  <i>Real output: six calls through the proxy to the official filesystem server. The raw log is in <a href="docs/demo/">docs/demo/</a>.</i>
+</p>
 
-Every decision is logged, with its reason, before anything runs. The agent only ever sees
-`BLOCKED` plus an audit reference, so it can't learn the rules and work around them.
+## Highlights
+
+- **Stops secrets leaving through tools**, even base64- or percent-encoded, even to a destination
+  that looks legitimate.
+- **Keeps private files private:** `.env`, keys, `.ssh` and credential files, including when the
+  path is tucked inside a list of other files.
+- **Remembers what your agent read** and stops that data leaving for anywhere you didn't allow, in a
+  URL, an email body or a subdomain ([taint tracking](#design-notes)).
+- **Blocks code planted to run later:** writes to git hooks, CI workflows, editor tasks and shell
+  rc files.
+- **Logs every decision before it runs.** The agent only ever sees `BLOCKED`, never which rule
+  fired, so it can't probe its way around the policy.
+- **Nothing can skip the check.** The Rust compiler enforces it, and tests pin it.
+- **Works with any stdio MCP server**, with [prebuilt binaries](https://github.com/Wazza0/mcp-runtime-authz/releases/latest)
+  for Linux, macOS and Windows.
 
 ## Quick start
 
-Download a prebuilt binary for Linux, macOS (Apple silicon) or Windows from
-[Releases](https://github.com/Wazza0/mcp-runtime-authz/releases/latest). Each archive includes the
-starter policies and a `.sha256` checksum. Or build from source with `cargo build --release`.
+Download the archive for your platform from
+[Releases](https://github.com/Wazza0/mcp-runtime-authz/releases/latest) (each includes the starter
+policies and a `.sha256` checksum), or build from source with `cargo build --release`. Then wrap a
+server:
 
 ```sh
 authz proxy --policy policies/filesystem.yaml --audit audit.jsonl \
@@ -50,15 +73,41 @@ Desktop's or Cursor's config (on Windows use `npx.cmd`):
 }
 ```
 
+See what happened at any time with `authz audit audit.jsonl`.
+
 | starter policy | wraps | what it adds |
 | --- | --- | --- |
 | [`filesystem.yaml`](policies/filesystem.yaml) | the official [filesystem server](https://www.npmjs.com/package/@modelcontextprotocol/server-filesystem) | credential files stay unreadable; secrets can't be written into files; no writes that run code later |
 | [`example-proxy.yaml`](policies/example-proxy.yaml) | a template for any server | an `allow` list for hosts, email recipients and shell commands |
 
+## How it works
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/how-it-works-dark.svg">
+  <img src="docs/img/how-it-works-light.svg" width="880" alt="Your MCP client sends a tool call to authz proxy, which decodes every argument, checks the policy and taint, and logs the decision first. Allowed calls go to the MCP server; refused calls return only BLOCKED with an audit reference. Every decision, with its rule and reason, goes to audit.jsonl.">
+</picture>
+
+Every call goes through one decision path, whether it comes from the proxy or the bundled test
+agent. Four guarantees hold by construction:
+
+- **Nothing skips the check.** Running a tool needs a single-use token bound to that exact call,
+  and only a policy allow (or a human approving an escalation) can mint one. Forging a token or
+  calling the tool client directly is a compile error, pinned by tests.
+- **Rules can only restrict.** A rule can deny or escalate, never allow, and the most severe match
+  wins, so no rule can loosen another.
+- **A human can approve a borderline call but never override a deny.** That's in the types, not a
+  convention.
+- **The log is written first.** If the audit write fails, the call doesn't run.
+
 ## Does it work?
 
-Measured on a small corpus (7 attacks, 6 benign tasks), unguarded vs guarded. Block rate counts
-only attacks that succeed without the guard, so the model resisting by itself earns no credit.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/results-dark.svg">
+  <img src="docs/img/results-light.svg" width="880" alt="Attacks blocked: 100% (7 of 7 scripted, 3 of 3 qwen3). Benign tasks broken: 0% (0 of 6 in every run). Approval prompts on benign tasks: 0. Bypasses found and fixed: 4. Small, self-written corpus: a demonstration, not proof of generality. If a human approves every prompt, the block rate drops to 86% scripted and 67% qwen3.">
+</picture>
+
+Measured on 7 attacks and 6 benign tasks, unguarded vs guarded. The block rate counts only attacks
+that succeed without the guard, so a model resisting by itself earns the guard no credit.
 
 | | scripted agent (obeys every injection) | qwen3:8b (real local model) |
 | --- | --- | --- |
@@ -67,10 +116,9 @@ only attacks that succeed without the guard, so the model resisting by itself ea
 | **false-positive rate** (benign tasks broken) | **0% (0/6)** | **0% (0/6)** |
 | block rate if a human approves every prompt | 86% (6/7) | 67% (2/3) |
 
-Prompts on the 6 benign tasks: zero, in every run. **Read these as a demonstration, not proof of
-generality:** the corpus is small and self-written, and the same author wrote the attacks and the
-rules. The full write-up, limitations included, is in [report/findings.md](report/findings.md).
-CI reproduces the scripted numbers on every push.
+The same author wrote the attacks and the rules, which flatters the result. The full write-up,
+limitations included, is in [report/findings.md](report/findings.md), and CI reproduces the
+scripted numbers on every push.
 
 ## Found and fixed
 
@@ -87,24 +135,7 @@ by a regression test:
    refused. Found only by testing against the real filesystem server; our own test server never
    takes lists.
 
-## How it works
-
-Every tool call goes through one decision path, the `Gate`, whether it comes from the proxy or
-the bundled test agent. Four guarantees hold by construction:
-
-- **Nothing skips the check, and the compiler enforces it.** Running a tool requires a single-use
-  token bound to that exact call, and only a policy allow (or a human approving an escalation) can
-  mint one. Forging a token or calling the tool client directly is a compile error, pinned by
-  tests.
-- **Rules can only restrict.** A rule can deny or escalate, never allow, and the most severe match
-  wins, so no rule can loosen another.
-- **A human can approve a borderline call but never override a deny.** That's in the types, not a
-  convention.
-- **The log is written first.** If the audit write fails, the call doesn't run.
-
-Arguments are decoded (percent, base64) and searched inside lists and objects before matching.
-MCP tool annotations are treated as untrusted hints that can only tighten a decision. Design notes
-are [below](#design-notes).
+The story behind each is in the [write-up](report/writeup.md).
 
 ## Writing a policy
 
@@ -120,10 +151,21 @@ Policies are YAML data; the engine is generic. Start from
 - **Malformed policies are rejected:** duplicate keys, unknown fields, bad patterns, and rules that
   could never fire all fail at load.
 
-## Tests and evaluation
+## Limitations
+
+- Small, self-written corpus; no attacker that adapts to the guard.
+- Taint tracking catches data reused verbatim or encoded, not paraphrased.
+- Pattern-based secret detection misses formats and encodings it doesn't know.
+- In the proxy, the `allow` list must be written by hand, and escalations can't prompt.
+
+More in [report/findings.md](report/findings.md#limitations). How this compares to published work
+(Progent, CaMeL, FIDES and others) is in [report/related-work.md](report/related-work.md).
+
+<details>
+<summary><b>Tests and evaluation</b></summary>
 
 ```sh
-cargo test --workspace                       # 27 tests: milestone gates, proxy, compile-time guarantees
+cargo test --workspace                       # milestone gates, proxy, compile-time guarantees
 cargo test -p authz-cli --test proxy_filesystem -- --ignored   # against the real server (needs Node)
 
 cargo run --release -p authz-cli --bin authz -- eval --ablation          # scripted agent + per-rule ablation
@@ -136,17 +178,10 @@ pass through intact and refused ones never reach the server. Attack cases carry 
 OWASP Top 10 for Agentic Applications 2026, the OWASP LLM Top 10 2025 and MITRE ATLAS v2026.10,
 pinned from official sources in `eval/frameworks/` and checked by `tests/refs.rs`.
 
-## Limitations
+</details>
 
-- Small, self-written corpus; no attacker that adapts to the guard.
-- Taint tracking catches data reused verbatim or encoded, not paraphrased.
-- Pattern-based secret detection misses formats and encodings it doesn't know.
-- In the proxy, the `allow` list must be written by hand; escalations can't prompt.
-
-More in [report/findings.md](report/findings.md#limitations). How this compares to published work
-(Progent, CaMeL, FIDES and others) is in [report/related-work.md](report/related-work.md).
-
-## Design notes
+<details>
+<summary id="design-notes"><b>Design notes</b></summary>
 
 **Layout.**
 
@@ -156,7 +191,7 @@ More in [report/findings.md](report/findings.md#limitations). How this compares 
 | `authz-guard` | the `Gate`, policy engine, inspection, taint, audit log, MCP client, and the two front ends: in-process `Interceptor` and stdio `Proxy` |
 | `authz-tools` | a simulated MCP tool server for the evaluation: nothing is sent, fetched or executed |
 | `authz-agent` | agent loop and model backends; **no dependency on the tool client**, so it can only act through what it's handed |
-| `authz-cli` | the `authz` binary: `proxy`, `run`, `eval`, `serve-tools` |
+| `authz-cli` | the `authz` binary: `proxy`, `audit`, `run`, `eval`, `serve-tools` |
 
 **The boundary, structurally.** `authz-agent` cannot name the tool client (`tests/boundary.rs`).
 Execution is crate-private (`tests/ui/bypass_exec.rs`, E0624) and consumes an `Authorization` that
@@ -180,7 +215,9 @@ if the injected text reached it. `ollama` runs a real local model (default `qwen
 **History.** Built in milestones M0 to M5 (bare agent, interceptor, context-aware policy,
 escalation, taint tracking, evaluation), then refocused into a proxy for real MCP servers.
 
+</details>
+
 ## License
 
 Dual-licensed under [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option.
-Found a way past the guard? See [SECURITY.md](SECURITY.md).
+Found a way past the guard? Please report it privately: see [SECURITY.md](SECURITY.md).

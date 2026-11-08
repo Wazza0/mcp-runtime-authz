@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 330" width="880" height="330" role="img" aria-label="How it works: your MCP client sends a tool call to authz proxy, which decodes every argument, checks the policy and taint, and logs the decision first. Allowed calls go to the MCP server; refused calls return only BLOCKED with an audit reference. Every decision, with its rule and reason, goes to audit.jsonl.">
+  <style>
+    .f { font-family: system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .card { fill: #fcfcfb; stroke: rgba(11,11,11,0.10); }
+    .box { fill: #fcfcfb; stroke: #c3c2b7; }
+    .acc { stroke: #2a78d6; stroke-width: 2; }
+    .t1 { fill: #0b0b0b; } .t2 { fill: #52514e; } .t3 { fill: #898781; }
+    .ln { stroke: #52514e; stroke-width: 1.6; fill: none; }
+    .ah { fill: #52514e; }
+    .num { fill: #2a78d6; } .numt { fill: #ffffff; }
+  </style>
+  <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 Z" class="ah"/></marker></defs>
+  <rect x="0.5" y="0.5" width="879" height="329" rx="12" class="card"/>
+
+  <rect x="24" y="112" width="170" height="80" rx="10" class="box"/>
+  <text x="109" y="144" text-anchor="middle" class="f t1" font-size="15" font-weight="600">Your MCP client</text>
+  <text x="109" y="164" text-anchor="middle" class="f t2" font-size="12">Claude Code · Cursor</text>
+  <text x="109" y="180" text-anchor="middle" class="f t2" font-size="12">Claude Desktop · …</text>
+
+  <line x1="194" y1="152" x2="250" y2="152" class="ln" marker-end="url(#a)"/>
+  <text x="222" y="142" text-anchor="middle" class="f t3" font-size="12">tool call</text>
+
+  <rect x="254" y="48" width="300" height="208" rx="12" class="box acc"/>
+  <text x="404" y="78" text-anchor="middle" class="f t1" font-size="16" font-weight="600">authz proxy</text>
+  <circle cx="282" cy="110" r="11" class="num"/><text x="282" y="114" text-anchor="middle" class="f numt" font-size="12" font-weight="700">1</text>
+  <text x="302" y="108" class="f t1" font-size="14">Decode every argument</text>
+  <text x="302" y="125" class="f t2" font-size="12">percent, base64, lists, objects</text>
+  <circle cx="282" cy="158" r="11" class="num"/><text x="282" y="162" text-anchor="middle" class="f numt" font-size="12" font-weight="700">2</text>
+  <text x="302" y="156" class="f t1" font-size="14">Check policy and taint</text>
+  <text x="302" y="173" class="f t2" font-size="12">allow list · secrets · session taint</text>
+  <circle cx="282" cy="206" r="11" class="num"/><text x="282" y="210" text-anchor="middle" class="f numt" font-size="12" font-weight="700">3</text>
+  <text x="302" y="204" class="f t1" font-size="14">Log the decision first</text>
+  <text x="302" y="221" class="f t2" font-size="12">no log write, no call</text>
+
+  <line x1="554" y1="100" x2="666" y2="100" class="ln" marker-end="url(#a)"/>
+  <path d="M572 86 l3.5 3.5 l6.5 -7" fill="none" stroke="#0ca30c" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="588" y="91" class="f t2" font-size="12">allowed</text>
+  <rect x="670" y="60" width="186" height="80" rx="10" class="box"/>
+  <text x="763" y="94" text-anchor="middle" class="f t1" font-size="15" font-weight="600">MCP server</text>
+  <text x="763" y="114" text-anchor="middle" class="f t2" font-size="12">filesystem, GitHub, …</text>
+
+  <line x1="554" y1="204" x2="666" y2="204" class="ln" marker-end="url(#a)"/>
+  <path d="M573 185 l8 8 M581 185 l-8 8" fill="none" stroke="#d03b3b" stroke-width="2.4" stroke-linecap="round"/>
+  <text x="588" y="194" class="f t2" font-size="12">refused</text>
+  <rect x="670" y="164" width="186" height="80" rx="10" class="box"/>
+  <text x="763" y="196" text-anchor="middle" class="f t2" font-size="12">Your agent sees only</text>
+  <text x="763" y="219" text-anchor="middle" class="mono t1" font-size="13">BLOCKED (audit #4)</text>
+
+  <line x1="404" y1="256" x2="404" y2="282" class="ln" marker-end="url(#a)"/>
+  <rect x="184" y="286" width="440" height="30" rx="15" class="box"/>
+  <text x="404" y="306" text-anchor="middle" class="f t1" font-size="13">audit.jsonl: every decision, with its rule and reason</text>
+</svg>

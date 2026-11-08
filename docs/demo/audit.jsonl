@@ -1,0 +1,6 @@
+{"also":[],"args":{"path":".env"},"note":"not executed","reason":"read_text_file.path carries sensitive_path data","rule":"sensitive-read","seq":1,"tool":"read_text_file","ts":1794162253724,"verdict":"block"}
+{"also":[],"args":{"path":"notes.md"},"note":"executing","reason":"within policy","rule":"-","seq":2,"tool":"read_text_file","ts":1794162253726,"verdict":"allow"}
+{"also":[],"args":{"paths":["notes.md",".env"]},"note":"not executed","reason":"read_multiple_files.paths carries sensitive_path data","rule":"sensitive-read","seq":3,"tool":"read_multiple_files","ts":1794162253729,"verdict":"block"}
+{"also":[],"args":{"content":"- ship parser fix","path":"todo.md"},"note":"executing","reason":"within policy","rule":"-","seq":4,"tool":"write_file","ts":1794162253732,"verdict":"allow"}
+{"also":[],"args":{"content":"token=sk-live-FAKE0000demo0000key","path":"config.txt"},"note":"not executed","reason":"write_file.content carries secret data","rule":"secret-write","seq":5,"tool":"write_file","ts":1794162253733,"verdict":"block"}
+{"also":[],"args":{"content":"echo hi","path":".git/hooks/pre-commit"},"note":"not executed","reason":"write_file.path carries runs_later data","rule":"runs-later-write","seq":6,"tool":"write_file","ts":1794162253734,"verdict":"block"}
