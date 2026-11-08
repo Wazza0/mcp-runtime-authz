@@ -65,7 +65,7 @@ A reviewer will find several weaknesses (updated after M4):
 
 1. **Score escalations.** Report the escalation rate on benign tasks as the approval burden. Progent reports 6%, and IGAC its clarification rate ([v3][progent-v3], [html][igac-h]). CaMeL warns that users stop reading frequent prompts ([v2][camel-v2h]). Report two bounds: the approver always approves, and the approver always denies. *Done:* `authz eval --approve allow|deny`; see findings.md.
 2. **Measure utility under attack.** Add a probe for the user's task to every attack case ([html][adojo-h]).
-3. **Take M4's policies from FIDES.** Use P-T and P-F, and label each result with the join of what it read and its arguments ([v2][fides-v2]). *Done in part:* the `BLOCKED` message used to quote argument values and name the firing rule. It is now generic, with an audit reference, so it carries no attacker text and gives no policy oracle (commit `15db363`).
+3. **Take M4's policies from FIDES.** Use P-T and P-F, and label each result with the join of what it read and its arguments ([v2][fides-v2]). *Done in part:* the `BLOCKED` message used to quote argument values and name the firing rule. It is now generic, with an audit reference, so it carries no attacker text and gives no policy oracle (commit `ce58ae2`).
 4. **Hash-chain the audit log** ([html][igac-h]).
 5. **Add harder cases:**
    - in-scope attacks ([html][oob-h])
