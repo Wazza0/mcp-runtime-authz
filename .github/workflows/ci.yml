@@ -43,6 +43,21 @@ jobs:
           cargo llvm-cov report --summary-only --fail-under-lines 80 | tee cov.txt
           { echo '## Test coverage'; echo; echo '```'; cat cov.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 
+  reproducible:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - name: Build the release binary twice from clean; the two must be bit-for-bit identical
+        run: |
+          for i in 1 2; do
+            cargo clean
+            cargo build --release --locked -p authz-cli --bin authz
+            sha256sum target/release/authz | tee "build$i.sha256"
+          done
+          [ "$(cut -d' ' -f1 build1.sha256)" = "$(cut -d' ' -f1 build2.sha256)" ]
+          echo "Reproducible: \`$(cut -d' ' -f1 build1.sha256)\`" >> "$GITHUB_STEP_SUMMARY"
+
   dependencies:
     runs-on: ubuntu-latest
     steps:

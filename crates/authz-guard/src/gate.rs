@@ -3,7 +3,7 @@
 //! Both front ends use this and nothing else. The in-process `Interceptor` serves the
 //! bundled agent; the `proxy` serves any MCP client. Neither re-implements a verdict.
 
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use authz_core::{Context, Decision, Hints, Policy, Taint, ToolCall};
 
@@ -55,13 +55,16 @@ impl Gate {
     /// Record the tool annotations the server declared. Untrusted; policy may only
     /// tighten on them.
     pub fn set_hints(&self, hints: impl IntoIterator<Item = (String, Hints)>) {
-        if let Ok(mut c) = self.ctx.lock() {
-            c.tools = hints.into_iter().collect();
-        }
+        self.ctx().tools = hints.into_iter().collect();
+    }
+
+    /// Survives a poisoned lock: dropping history or taint here would fail open.
+    fn ctx(&self) -> MutexGuard<'_, Context> {
+        self.ctx.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
     fn snapshot(&self) -> Context {
-        self.ctx.lock().map(|c| c.clone()).unwrap_or_default()
+        self.ctx().clone()
     }
 
     /// Ok means the call is authorized and the decision is already on disk.
@@ -101,12 +104,11 @@ impl Gate {
     /// Called by the front end with the real output; the model never writes here.
     pub fn observe(&self, call: &ToolCall, text: &str) {
         let label = self.policy.taint(&call.tool);
-        if let Ok(mut c) = self.ctx.lock() {
-            c.history.push(call.clone());
-            if let Some(label) = label {
-                let step = c.history.len();
-                c.taint.push(Taint { label, source: describe(call), step, text: text.to_string() });
-            }
+        let mut c = self.ctx();
+        c.history.push(call.clone());
+        if let Some(label) = label {
+            let step = c.history.len();
+            c.taint.push(Taint { label, source: describe(call), step, text: text.to_string() });
         }
     }
 }

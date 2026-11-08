@@ -28,8 +28,10 @@ welcome.
 
 ## Requirements for acceptable contributions
 
-- **Formatting and lints:** code is formatted with `rustfmt` using the repository's
-  [`rustfmt.toml`](rustfmt.toml), and passes `clippy` with warnings treated as errors.
+- **Coding standard:** Rust code follows the [Rust Style Guide](https://doc.rust-lang.org/style-guide/)
+  as applied by `rustfmt` with the repository's [`rustfmt.toml`](rustfmt.toml), and the
+  [Rust API Guidelines](https://rust-lang.github.io/api-guidelines/) for public items. It must pass
+  `clippy` with warnings treated as errors. CI enforces formatting and lints on every pull request.
 - **Tests:** every behaviour change comes with a test. A fix for a bypass comes with a regression
   test that fails before the fix and passes after it. CI fails if line coverage of the test suite
   drops below 80% (`cargo llvm-cov --workspace --summary-only`). A change that moves the evaluation
@@ -48,6 +50,16 @@ welcome.
   only, no known advisories).
 - **Style:** short names and few comments. Comment intent, invariants and security reasoning, not
   what the code obviously does.
+
+## Developer Certificate of Origin
+
+Every commit must be signed off, certifying the [Developer Certificate of Origin 1.1](https://developercertificate.org/):
+that you wrote the change or otherwise have the right to submit it under the project's license.
+Sign off by committing with `git commit -s`, which adds a line like:
+
+```
+Signed-off-by: Your Name <you@example.com>
+```
 
 ## Licensing
 

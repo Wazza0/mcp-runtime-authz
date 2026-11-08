@@ -5,7 +5,8 @@ Reports are very welcome.
 
 ## What counts
 
-Anything that breaks a guarantee the project claims, for example:
+Anything that breaks a guarantee the project claims (listed in [docs/security.md](docs/security.md)),
+for example:
 
 - A tool call that the policy should refuse but that reaches the downstream server.
 - A way to make a refused call, or its reason, disappear from the audit log.

@@ -62,6 +62,8 @@ Cargo:
 cargo install --git https://github.com/Wazza0/mcp-runtime-authz --locked authz-cli
 ```
 
+To remove it, run `cargo uninstall authz-cli`, or delete the `authz` binary if you used an archive.
+
 **2. Get a policy.** Use a [starter policy](#starter-policies), or draft one from the server's own
 tool list and review it:
 
@@ -221,7 +223,9 @@ A security tool should hold itself to the standard it enforces. On every push, C
 
 All CI actions are pinned to exact commits, Dependabot keeps them and the dependencies patched,
 `master` is protected against force-pushes, and the [OpenSSF Scorecard](https://scorecard.dev/viewer/?uri=github.com/Wazza0/mcp-runtime-authz)
-grades the setup publicly. Report a vulnerability privately via [SECURITY.md](SECURITY.md).
+grades the setup publicly. What the guard does and does not guarantee, the threat model, the trust
+boundaries and the weaknesses it counters are in [docs/security.md](docs/security.md). Report a
+vulnerability privately via [SECURITY.md](SECURITY.md).
 
 ## Limitations
 
@@ -288,6 +292,8 @@ fails closed, `allow` approves everything. The audit log records `escalate`, the
 if the injected text reached it. `ollama` runs a real local model (default `qwen3:8b`, temperature
 0, fixed seed, reasoning off, neutral system prompt); set `AUTHZ_MODEL` and `OLLAMA_HOST`.
 
+The full design is in [docs/architecture.md](docs/architecture.md).
+
 **History.** Built in milestones M0 to M5 (bare agent, interceptor, context-aware policy,
 escalation, taint tracking, evaluation), then refocused into a proxy for real MCP servers.
 
@@ -296,5 +302,6 @@ escalation, taint tracking, evaluation), then refocused into a proxy for real MC
 ## License
 
 Dual-licensed under [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option.
-Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md).
+Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md), the [code of conduct](CODE_OF_CONDUCT.md),
+[governance](GOVERNANCE.md) and the [roadmap](ROADMAP.md).
 Found a way past the guard? Please report it privately: see [SECURITY.md](SECURITY.md).
