@@ -6,7 +6,7 @@
 
 <p align="center">
   <b>Stop your AI agent leaking secrets through its tools.</b><br>
-  A firewall between MCP clients and the servers they call: every tool call is checked before it runs.
+  A firewall between MCP clients and the servers they call, every tool call is checked before it runs.
 </p>
 
 <p align="center">
