@@ -16,7 +16,11 @@ fn root() -> &'static Path {
 }
 
 fn text(r: &CallToolResult) -> String {
-    r.content.iter().filter_map(|c| c.as_text().map(|t| t.text.clone())).collect::<Vec<_>>().join("\n")
+    r.content
+        .iter()
+        .filter_map(|c| c.as_text().map(|t| t.text.clone()))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn call(name: &str, args: Value) -> CallToolRequestParams {

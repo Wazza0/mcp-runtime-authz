@@ -139,7 +139,11 @@ pub struct Hints {
 
 impl Hints {
     /// Applies the MCP spec defaults for absent hints (pessimistic).
-    pub fn from_mcp(read_only: Option<bool>, destructive: Option<bool>, open_world: Option<bool>) -> Self {
+    pub fn from_mcp(
+        read_only: Option<bool>,
+        destructive: Option<bool>,
+        open_world: Option<bool>,
+    ) -> Self {
         let read_only = read_only.unwrap_or(false);
         Self {
             read_only,

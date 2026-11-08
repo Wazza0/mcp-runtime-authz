@@ -85,7 +85,7 @@ impl Gate {
                 let Ok(seq) = self.audit.answer(call, &d, a.granted, &a.by) else {
                     return Err(audit_down());
                 };
-                approve(esc, &a).map_err(|_| denied(Some(seq), "a reviewer declined this action"))
+                approve(*esc, &a).map_err(|_| denied(Some(seq), "a reviewer declined this action"))
             }
         }
     }
@@ -98,12 +98,7 @@ impl Gate {
             c.history.push(call.clone());
             if let Some(label) = label {
                 let step = c.history.len();
-                c.taint.push(Taint {
-                    label,
-                    source: describe(call),
-                    step,
-                    text: text.to_string(),
-                });
+                c.taint.push(Taint { label, source: describe(call), step, text: text.to_string() });
             }
         }
     }

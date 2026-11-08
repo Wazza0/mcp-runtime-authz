@@ -75,8 +75,12 @@ pub async fn run_case(rig: &Rig, s: &Scenario, rules: &Rules, tag: &str) -> Resu
     let guard =
         Interceptor::new(mcp, Box::new(rules.clone()), rig.approver.clone(), audit, ctx).await?;
     let transcript = match rig.brain {
-        Brain::Scripted => run(&mut Scripted::new(s.plan.clone()), &guard, &s.task, MAX_STEPS).await?,
-        Brain::Ollama => run(&mut Ollama::new(guard.catalog())?, &guard, &s.task, MAX_STEPS).await?,
+        Brain::Scripted => {
+            run(&mut Scripted::new(s.plan.clone()), &guard, &s.task, MAX_STEPS).await?
+        }
+        Brain::Ollama => {
+            run(&mut Ollama::new(guard.catalog())?, &guard, &s.task, MAX_STEPS).await?
+        }
     };
     guard.close().await?;
 

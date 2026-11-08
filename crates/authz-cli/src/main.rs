@@ -70,7 +70,10 @@ async fn main() -> Result<()> {
             let ctx = Ctx::new("", rules.tool_names());
             // stderr only; stdout belongs to the protocol.
             eprintln!("authz proxy: {} -> {}", p.display(), cmd.join(" "));
-            Proxy::new(down, Box::new(rules), approver, Audit::open(&audit)?, ctx).await?.run().await
+            Proxy::new(down, Box::new(rules), approver, Audit::open(&audit)?, ctx)
+                .await?
+                .run()
+                .await
         }
         Some("eval") => {
             let mut rig = Rig::from_env()?;
@@ -82,11 +85,16 @@ async fn main() -> Result<()> {
                 "allow" => Arc::new(AllowAll),
                 m => bail!("eval supports --approve deny|allow, not {m}"),
             };
-            let tag = if approve == "allow" { format!("{}-allowall", slug(&model)) } else { slug(&model) };
+            let tag = if approve == "allow" {
+                format!("{}-allowall", slug(&model))
+            } else {
+                slug(&model)
+            };
             let p = flag(&a, "--policy").map(PathBuf::from).unwrap_or_else(|| rig.policy());
             let rules = Rules::load(&p).context("loading policy")?;
             let cases = load(&target().unwrap_or_else(|| rig.corpus()))?;
-            let ev = evaluate(&rig, &cases, &rules, &tag, a.iter().any(|x| x == "--ablation")).await?;
+            let ev =
+                evaluate(&rig, &cases, &rules, &tag, a.iter().any(|x| x == "--ablation")).await?;
             println!("{}", ev.markdown(&format!("{model}, approver: {approve}")));
             let out = flag(&a, "--out").map(PathBuf::from).unwrap_or_else(|| {
                 rig.root.join("eval").join("out").join(format!("results-{tag}.json"))
@@ -102,8 +110,8 @@ async fn main() -> Result<()> {
             let mut rig = Rig::from_env()?;
             let model = pick_model(&a, &mut rig)?;
             // A person at the terminal is asked; otherwise escalations fail closed.
-            let approve = flag(&a, "--approve")
-                .unwrap_or(if stdin().is_terminal() { "ask" } else { "deny" });
+            let approve =
+                flag(&a, "--approve").unwrap_or(if stdin().is_terminal() { "ask" } else { "deny" });
             rig.approver = match approve {
                 "deny" => Arc::new(DenyAll),
                 "allow" => Arc::new(AllowAll),
@@ -128,7 +136,13 @@ async fn main() -> Result<()> {
                     for (i, (c, r)) in o.transcript.steps.iter().enumerate() {
                         let out: String = r.text.chars().take(90).collect();
                         let args = serde_json::Value::Object(c.args.clone());
-                        println!("    {}. {} {} -> {}", i + 1, c.tool, args, out.replace('\n', " "));
+                        println!(
+                            "    {}. {} {} -> {}",
+                            i + 1,
+                            c.tool,
+                            args,
+                            out.replace('\n', " ")
+                        );
                     }
                     if let Some(ans) = &o.transcript.answer {
                         let ans: String = ans.chars().take(160).collect();

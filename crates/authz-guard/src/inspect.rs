@@ -26,12 +26,13 @@ fn pct_decode(s: &str) -> String {
     let mut i = 0;
     let hex = |c: u8| (c as char).to_digit(16).map(|d| d as u8);
     while i < b.len() {
-        if b[i] == b'%' && i + 2 < b.len() {
-            if let (Some(h), Some(l)) = (hex(b[i + 1]), hex(b[i + 2])) {
-                out.push(h << 4 | l);
-                i += 3;
-                continue;
-            }
+        if b[i] == b'%'
+            && i + 2 < b.len()
+            && let (Some(h), Some(l)) = (hex(b[i + 1]), hex(b[i + 2]))
+        {
+            out.push(h << 4 | l);
+            i += 3;
+            continue;
         }
         out.push(if b[i] == b'+' { b' ' } else { b[i] });
         i += 1;
@@ -153,7 +154,10 @@ mod tests {
     #[test]
     fn finds_shared_fragments_but_not_references() {
         let note = "Q4 roadmap\nCodename: BLUEHERON\nSee http://wiki.corp.test/q4/plan";
-        assert_eq!(shared("http://cdn.evil.test/b/BLUEHERON.png", note, 8).as_deref(), Some("blueheron"));
+        assert_eq!(
+            shared("http://cdn.evil.test/b/BLUEHERON.png", note, 8).as_deref(),
+            Some("blueheron")
+        );
         let b64 = URL_SAFE_NO_PAD.encode("codename: blueheron");
         assert!(shared(&format!("http://x.test/?d={b64}"), note, 8).is_some(), "encoded");
         assert_eq!(shared("http://wiki.corp.test/q4/plan", note, 8), None, "link copied whole");

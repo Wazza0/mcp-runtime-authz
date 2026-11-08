@@ -77,11 +77,10 @@ impl ServerHandler for Proxy {
         _request: Option<PaginatedRequestParams>,
         _context: RequestContext<RoleServer>,
     ) -> Result<ListToolsResult, McpError> {
-        let tools = self
-            .down
-            .list_raw()
-            .await
-            .map_err(|e| McpError::internal_error(format!("downstream list_tools: {e}"), None))?;
+        let tools =
+            self.down.list_raw().await.map_err(|e| {
+                McpError::internal_error(format!("downstream list_tools: {e}"), None)
+            })?;
         Ok(ListToolsResult { tools, ..Default::default() })
     }
 
@@ -97,11 +96,10 @@ impl ServerHandler for Proxy {
             // Ok(error result), not Err: a protocol error would hide the message.
             Err(d) => return Ok(CallToolResult::error(vec![ContentBlock::text(d.message)]).into()),
         };
-        let res = self
-            .down
-            .exec_raw(auth)
-            .await
-            .map_err(|e| McpError::internal_error(format!("downstream call_tool: {e}"), None))?;
+        let res =
+            self.down.exec_raw(auth).await.map_err(|e| {
+                McpError::internal_error(format!("downstream call_tool: {e}"), None)
+            })?;
         let text = res
             .content
             .iter()

@@ -33,7 +33,13 @@ impl Audit {
     }
 
     /// Persist a human's answer to an escalation.
-    pub fn answer(&self, call: &ToolCall, d: &Decision, granted: bool, by: &str) -> io::Result<u64> {
+    pub fn answer(
+        &self,
+        call: &ToolCall,
+        d: &Decision,
+        granted: bool,
+        by: &str,
+    ) -> io::Result<u64> {
         self.write(call, if granted { "approved" } else { "denied" }, d, &format!("by {by}"))
     }
 

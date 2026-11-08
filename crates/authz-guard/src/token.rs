@@ -41,14 +41,14 @@ impl Escalation {
 #[derive(Debug)]
 pub enum Refusal {
     Blocked(Decision),
-    Pending(Escalation),
+    Pending(Box<Escalation>),
 }
 
 pub fn authorize(p: &dyn Policy, call: &ToolCall, ctx: &Context) -> Result<Authorization, Refusal> {
     match p.decide(call, ctx) {
         Decision::Allow => Ok(Authorization { call: call.clone() }),
         d @ Decision::Escalate { .. } => {
-            Err(Refusal::Pending(Escalation { call: call.clone(), decision: d }))
+            Err(Refusal::Pending(Box::new(Escalation { call: call.clone(), decision: d })))
         }
         d => Err(Refusal::Blocked(d)),
     }

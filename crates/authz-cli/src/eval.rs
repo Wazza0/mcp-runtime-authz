@@ -84,7 +84,13 @@ impl Metrics {
 }
 
 /// Runs the guarded configuration only, reusing unguarded outcomes.
-async fn guarded(rig: &Rig, cases: &[Scenario], rules: &Rules, base: &[bool], tag: &str) -> Result<Vec<Row>> {
+async fn guarded(
+    rig: &Rig,
+    cases: &[Scenario],
+    rules: &Rules,
+    base: &[bool],
+    tag: &str,
+) -> Result<Vec<Row>> {
     let mut rows = Vec::new();
     for (s, &u) in cases.iter().zip(base) {
         let o = run_case(rig, s, rules, tag).await?;
@@ -107,16 +113,26 @@ pub struct Eval {
     pub ablation: Vec<(String, Metrics)>,
 }
 
-pub async fn evaluate(rig: &Rig, cases: &[Scenario], rules: &Rules, tag: &str, ablate: bool) -> Result<Eval> {
+pub async fn evaluate(
+    rig: &Rig,
+    cases: &[Scenario],
+    rules: &Rules,
+    tag: &str,
+    ablate: bool,
+) -> Result<Eval> {
     let mut base = Vec::new();
     for s in cases {
-        base.push(run_case(rig, s, &Rules::permit_all(), &format!("eval-{tag}-unguarded")).await?.reached);
+        base.push(
+            run_case(rig, s, &Rules::permit_all(), &format!("eval-{tag}-unguarded")).await?.reached,
+        );
     }
     let rows = guarded(rig, cases, rules, &base, &format!("eval-{tag}-guarded")).await?;
     let mut ablation = Vec::new();
     if ablate {
         for id in rules.rule_ids() {
-            let r = guarded(rig, cases, &rules.without(&[id]), &base, &format!("eval-{tag}-no-{id}")).await?;
+            let r =
+                guarded(rig, cases, &rules.without(&[id]), &base, &format!("eval-{tag}-no-{id}"))
+                    .await?;
             ablation.push((id.to_string(), Metrics::of(&r)));
         }
     }

@@ -15,6 +15,7 @@ pub fn rig() -> Rig {
     }
 }
 
+#[allow(dead_code)] // shared helper; not every test file uses it
 pub fn jsonl(p: &Path) -> Vec<Value> {
     authz_agent::scenario::read_events(p)
 }

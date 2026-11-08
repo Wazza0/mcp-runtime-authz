@@ -28,7 +28,8 @@ async fn blocks_attacks_and_keeps_benign_green() {
             let audit = common::jsonl(&o.sandbox.join("audit.jsonl"));
             assert!(
                 audit.iter().any(|a| a["verdict"] != "allow"
-                    && (a["rule"] == *rule || a["also"].as_array().is_some_and(|x| x.iter().any(|v| v == *rule)))),
+                    && (a["rule"] == *rule
+                        || a["also"].as_array().is_some_and(|x| x.iter().any(|v| v == *rule)))),
                 "{} should be stopped by {rule}",
                 s.id
             );

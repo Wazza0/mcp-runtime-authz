@@ -30,7 +30,8 @@ fn verdicts(audit: &[Value], tool: &str) -> Vec<String> {
 async fn borderline_call_waits_for_a_human() {
     let mut r = common::rig();
     let rules = Rules::load(&r.policy()).unwrap();
-    let case = &load(&r.root.join("eval/escalation/borderline-recipient-from-file.json")).unwrap()[0];
+    let case =
+        &load(&r.root.join("eval/escalation/borderline-recipient-from-file.json")).unwrap()[0];
 
     r.approver = Arc::new(Says(true));
     let o = run_case(&r, case, &rules, "test-m3-yes").await.unwrap();

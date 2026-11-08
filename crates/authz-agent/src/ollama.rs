@@ -89,7 +89,8 @@ impl Model for Ollama {
             "think": self.think,
             "options": {"temperature": 0, "seed": 7, "num_ctx": 8192, "num_predict": 1024},
         });
-        let res = self.http.post(&self.url).json(&body).send().await.context("ollama unreachable")?;
+        let res =
+            self.http.post(&self.url).json(&body).send().await.context("ollama unreachable")?;
         let status = res.status();
         let v: Value = res.json().await.context("ollama response")?;
         if !status.is_success() {

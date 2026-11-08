@@ -1,0 +1,4 @@
+# Pinned: the trybuild snapshots in crates/authz-guard/tests/ui pin exact compiler errors.
+[toolchain]
+channel = "1.99.1"
+components = ["rustfmt", "clippy"]

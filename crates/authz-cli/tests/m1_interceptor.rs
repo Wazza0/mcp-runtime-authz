@@ -2,7 +2,6 @@
 
 mod common;
 
-
 use authz_cli::{load, run_case};
 use authz_guard::Rules;
 

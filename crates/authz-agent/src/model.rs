@@ -47,11 +47,7 @@ impl Model for Scripted {
                 }
             }
             let last = log.last().map(|(_, r)| r.text.trim()).unwrap_or_default();
-            let args = s
-                .args
-                .iter()
-                .map(|(k, v)| (k.clone(), fill(v, last)))
-                .collect();
+            let args = s.args.iter().map(|(k, v)| (k.clone(), fill(v, last))).collect();
             return Ok(Step::Call(ToolCall::new(&s.tool, args)));
         }
         Ok(Step::Done("done".into()))

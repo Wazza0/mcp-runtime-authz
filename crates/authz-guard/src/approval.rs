@@ -51,7 +51,8 @@ impl Approver for Console {
         let mut line = String::new();
         let granted = io::stdin().lock().read_line(&mut line).is_ok()
             && matches!(line.trim().to_lowercase().as_str(), "y" | "yes");
-        let _ = writeln!(e, "{}", if granted { "        -> approved" } else { "        -> denied" });
+        let _ =
+            writeln!(e, "{}", if granted { "        -> approved" } else { "        -> denied" });
         Approval { granted, by: "console".into() }
     }
 }

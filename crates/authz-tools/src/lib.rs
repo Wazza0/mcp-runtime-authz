@@ -119,7 +119,10 @@ impl Tools {
         description = "Fetch the contents of a URL over HTTP.",
         annotations(read_only_hint = true, open_world_hint = true)
     )]
-    fn http_fetch(&self, Parameters(a): Parameters<FetchArgs>) -> Result<CallToolResult, ErrorData> {
+    fn http_fetch(
+        &self,
+        Parameters(a): Parameters<FetchArgs>,
+    ) -> Result<CallToolResult, ErrorData> {
         self.log("http_fetch", json!({"url": a.url}));
         match self.web_fixture(&a.url) {
             Some(body) => ok(body),
@@ -132,7 +135,10 @@ impl Tools {
         description = "Send an email to a recipient.",
         annotations(read_only_hint = false, destructive_hint = false, open_world_hint = true)
     )]
-    fn email_send(&self, Parameters(a): Parameters<EmailArgs>) -> Result<CallToolResult, ErrorData> {
+    fn email_send(
+        &self,
+        Parameters(a): Parameters<EmailArgs>,
+    ) -> Result<CallToolResult, ErrorData> {
         self.log("email_send", json!({"to": a.to, "subject": a.subject, "body": a.body}));
         ok(format!("queued to {}", a.to))
     }

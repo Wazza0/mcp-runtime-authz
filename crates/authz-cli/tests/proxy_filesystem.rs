@@ -19,7 +19,11 @@ fn root() -> &'static Path {
 }
 
 fn text(r: &CallToolResult) -> String {
-    r.content.iter().filter_map(|c| c.as_text().map(|t| t.text.clone())).collect::<Vec<_>>().join("\n")
+    r.content
+        .iter()
+        .filter_map(|c| c.as_text().map(|t| t.text.clone()))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn call(name: &str, args: Value) -> CallToolRequestParams {
@@ -62,7 +66,10 @@ async fn guards_the_official_filesystem_server() {
         ("read_text_file", json!({"path": format!("{d}/.env")})),
         ("read_multiple_files", json!({"paths": [format!("{d}/notes.md"), format!("{d}/.env")]})),
         ("write_file", json!({"path": format!("{d}/.git/hooks/pre-commit"), "content": "echo x"})),
-        ("write_file", json!({"path": format!("{d}/config.txt"), "content": "k=sk-live-FAKE0000demo0000key"})),
+        (
+            "write_file",
+            json!({"path": format!("{d}/config.txt"), "content": "k=sk-live-FAKE0000demo0000key"}),
+        ),
     ];
     for (tool, args) in refused {
         let r = client.call_tool(call(tool, args.clone())).await.unwrap();
@@ -73,7 +80,10 @@ async fn guards_the_official_filesystem_server() {
     client.cancel().await.unwrap();
 
     assert!(dir.join("notes2.md").exists());
-    assert!(!dir.join("config.txt").exists() && !dir.join(".git").exists(), "a refused write landed");
+    assert!(
+        !dir.join("config.txt").exists() && !dir.join(".git").exists(),
+        "a refused write landed"
+    );
     let log = fs::read_to_string(&audit).unwrap();
     for rule in ["sensitive-read", "runs-later-write", "secret-write"] {
         assert!(log.contains(rule), "audit missing {rule}");
