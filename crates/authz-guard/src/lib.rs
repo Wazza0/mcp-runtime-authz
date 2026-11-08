@@ -4,6 +4,7 @@ pub mod gate;
 pub mod inspect;
 pub mod interceptor;
 pub mod mcp;
+pub mod pin;
 pub mod policy;
 pub mod proxy;
 pub mod token;

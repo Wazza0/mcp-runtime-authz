@@ -90,6 +90,13 @@ impl Gate {
         }
     }
 
+    /// Refuse for a reason outside the policy, e.g. a tool that changed since it was pinned.
+    /// Same message to the agent as a policy refusal; the detail goes to the audit log.
+    pub fn refuse(&self, call: &ToolCall, d: &Decision) -> Denied {
+        let seq = self.audit.record(call, d, "not executed").ok();
+        denied(seq, "this action is not permitted by policy")
+    }
+
     /// Record what an executed call returned, so later calls can be judged against it.
     /// Called by the front end with the real output; the model never writes here.
     pub fn observe(&self, call: &ToolCall, text: &str) {

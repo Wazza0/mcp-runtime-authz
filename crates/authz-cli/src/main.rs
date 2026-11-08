@@ -9,9 +9,10 @@ use anyhow::{Context, Result, bail};
 use authz_agent::Kind;
 use authz_cli::{Brain, Rig, eval::evaluate, label, load, run_case};
 use authz_core::Context as Ctx;
-use authz_guard::{AllowAll, Approver, Audit, Console, DenyAll, Mcp, Proxy, Rules};
+use authz_guard::{AllowAll, Approver, Audit, Console, DenyAll, Mcp, Proxy, Rules, proxy::PinFile};
 
 const USAGE: &str = "usage: authz proxy --policy <file> [--audit <file>] [--approve deny|allow] \
+[--pin <tools.lock> [--repin]] \
 -- <mcp-server-command> [args...]
        authz audit <audit.jsonl>
        authz init [--out <file>] -- <mcp-server-command> [args...]
@@ -103,7 +104,9 @@ async fn main() -> Result<()> {
             let ctx = Ctx::new("", rules.tool_names());
             // stderr only; stdout belongs to the protocol.
             eprintln!("authz proxy: {} -> {}", p.display(), cmd.join(" "));
-            Proxy::new(down, Box::new(rules), approver, Audit::open(&audit)?, ctx)
+            let pin = flag(opts, "--pin")
+                .map(|p| PinFile { path: p.into(), repin: opts.iter().any(|x| x == "--repin") });
+            Proxy::new(down, Box::new(rules), approver, Audit::open(&audit)?, ctx, pin)
                 .await?
                 .run()
                 .await
