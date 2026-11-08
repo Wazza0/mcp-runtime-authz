@@ -26,8 +26,11 @@ Every decision is logged, with its reason, before anything runs. The agent only 
 
 ## Quick start
 
+Download a prebuilt binary for Linux, macOS (Apple silicon) or Windows from
+[Releases](https://github.com/Wazza0/mcp-runtime-authz/releases/latest). Each archive includes the
+starter policies and a `.sha256` checksum. Or build from source with `cargo build --release`.
+
 ```sh
-cargo build --release
 authz proxy --policy policies/filesystem.yaml --audit audit.jsonl \
   -- npx -y @modelcontextprotocol/server-filesystem /path/to/project
 ```
