@@ -1,6 +1,7 @@
 //! If a decision cannot be written to the audit log, the call does not run: on the allow
-//! path, the escalation path, and the block path. /dev/full fails every write.
-#![cfg(unix)]
+//! path, the escalation path, and the block path. /dev/full fails every write; it exists
+//! on Linux only (not macOS).
+#![cfg(target_os = "linux")]
 
 use std::{path::Path, sync::Arc};
 
