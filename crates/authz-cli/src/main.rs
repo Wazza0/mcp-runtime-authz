@@ -1,7 +1,7 @@
 use std::{
     env, fs,
     io::{IsTerminal, stdin},
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::Arc,
 };
 
@@ -14,6 +14,7 @@ use authz_guard::{AllowAll, Approver, Audit, Console, DenyAll, Mcp, Proxy, Rules
 const USAGE: &str = "usage: authz proxy --policy <file> [--audit <file>] [--approve deny|allow] \
 -- <mcp-server-command> [args...]
        authz audit <audit.jsonl>
+       authz init [--out <file>] -- <mcp-server-command> [args...]
        authz run [case.json|dir] [-v] [--policy <file> | --unguarded] \
 [--model scripted|ollama] [--approve deny|allow|ask]
        authz eval [--model scripted|ollama] [--approve deny|allow] [--policy <file>] [--ablation] [--out <file>]
@@ -51,6 +52,32 @@ async fn main() -> Result<()> {
         Some("audit") => {
             let p = a.get(1).context("usage: authz audit <audit.jsonl>")?;
             print!("{}", authz_cli::report::audit_table(&fs::read_to_string(p)?));
+            Ok(())
+        }
+        Some("init") => {
+            let (opts, cmd) = match a.iter().position(|x| x == "--") {
+                Some(i) if a.len() > i + 1 => (&a[..i], &a[i + 1..]),
+                _ => bail!("init needs a server after `--`\n{USAGE}"),
+            };
+            let out = flag(opts, "--out");
+            if let Some(p) = out.filter(|p| Path::new(p).exists()) {
+                bail!("{p} already exists; refusing to overwrite it");
+            }
+            let down = Mcp::connect(&cmd[0], &cmd[1..], &[]).await?;
+            let tools = down.tools().await?;
+            let info = down.downstream_info();
+            let name = info.as_ref().and_then(|i| i.server_info.as_ref()).map(|s| s.name.clone());
+            down.close().await?;
+            let label = format!("{} ({})", name.unwrap_or_default(), cmd.join(" "));
+            let y = authz_cli::init::draft(&label, &tools);
+            Rules::parse(&y).context("internal error: the drafted policy does not load")?;
+            match out {
+                Some(p) => {
+                    fs::write(p, &y)?;
+                    eprintln!("wrote {p} for {} tools: review it before use", tools.len());
+                }
+                None => print!("{y}"),
+            }
             Ok(())
         }
         Some("proxy") => {
