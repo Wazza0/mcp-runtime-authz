@@ -4,3 +4,4 @@ audit.log
 eval/out/
 sandbox/
 .claude/worktrees/
+.cargo/config.toml
