@@ -57,7 +57,7 @@ checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 
 [[package]]
 name = "authz-agent"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "authz-core",
@@ -69,7 +69,7 @@ dependencies = [
 
 [[package]]
 name = "authz-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "authz-agent",
@@ -83,7 +83,7 @@ dependencies = [
 
 [[package]]
 name = "authz-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -91,7 +91,7 @@ dependencies = [
 
 [[package]]
 name = "authz-guard"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "authz-core",
@@ -109,7 +109,7 @@ dependencies = [
 
 [[package]]
 name = "authz-tools"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "authz-core",
