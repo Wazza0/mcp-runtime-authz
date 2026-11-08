@@ -1,5 +1,7 @@
 //! Shared types. Everything in the system hangs off ToolCall, Context, Decision.
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
@@ -101,19 +103,41 @@ pub trait Executor {
     fn exec(&self, call: &ToolCall) -> impl Future<Output = ToolResult> + Send;
 }
 
+/// Tool annotations as declared by the MCP server. Untrusted: the server may lie,
+/// so policy may only use these to tighten a decision, never to loosen one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Hints {
+    pub read_only: bool,
+    pub destructive: bool,
+    pub open_world: bool,
+}
+
+impl Hints {
+    /// Applies the MCP spec defaults for absent hints (pessimistic).
+    pub fn from_mcp(read_only: Option<bool>, destructive: Option<bool>, open_world: Option<bool>) -> Self {
+        let read_only = read_only.unwrap_or(false);
+        Self {
+            read_only,
+            destructive: !read_only && destructive.unwrap_or(true),
+            open_world: open_world.unwrap_or(true),
+        }
+    }
+}
+
 /// What the guard knows about the session when it judges a call.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Context {
-    /// The task the user actually asked for. Scope is derived from this.
+    /// The task the user actually asked for. Trusted; entities named here are permitted.
     pub task: String,
     pub scope: Vec<String>,
     pub history: Vec<ToolCall>,
     /// Fragments of untrusted data seen so far (M4).
     pub taint: Vec<String>,
+    pub tools: BTreeMap<String, Hints>,
 }
 
 impl Context {
     pub fn new(task: impl Into<String>, scope: Vec<String>) -> Self {
-        Self { task: task.into(), scope, history: Vec::new(), taint: Vec::new() }
+        Self { task: task.into(), scope, ..Default::default() }
     }
 }

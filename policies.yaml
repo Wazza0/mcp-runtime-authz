@@ -1,8 +1,61 @@
-# Least-privilege policy. Unlisted tools fall to `default`.
-# M1: static allowlist only. Context-aware rules arrive in M2.
+# Least-privilege runtime policy (semantics: crates/authz-guard/src/policy.rs).
+# Rules only restrict; every matching rule is evaluated and the most severe wins.
+# `escalate` fails closed until the approval path lands (M3).
 default: deny
+
+# Trusted risk classes, set here rather than by the server.
 tools:
-  fs_read: allow
-  http_fetch: allow
-  email_send: allow
-  shell_run: allow
+  fs_read:    {action: allow, class: read}
+  http_fetch: {action: allow, class: egress}   # MCP-annotated read-only, yet an exfil channel
+  email_send: {action: allow, class: egress}
+  shell_run:  {action: allow, class: exec}
+
+patterns:
+  secret:
+    - 'sk-(live|test|proj)-[A-Za-z0-9_-]{8,}'
+    - 'AKIA[0-9A-Z]{16}'
+    - '(?i)aws_secret_access_key'
+    - 'gh[pousr]_[A-Za-z0-9]{20,}'
+    - '-----BEGIN [A-Z ]*PRIVATE KEY-----'
+  sensitive_path:
+    - '^/?secrets/'
+    - '(^|/)\.env$'
+    - '\.(pem|key)$'
+    - '(^|/)id_(rsa|ed25519)'
+
+rules:
+  - id: out-of-scope            # an action the user never asked for
+    action: deny
+    when: [not_in_scope]
+
+  - id: sensitive-read
+    action: escalate
+    tool: fs_read
+    when: [{arg_matches: {arg: path, set: sensitive_path}}]
+
+  - id: unnamed-recipient       # recipient came from somewhere other than the user
+    action: escalate
+    tool: email_send
+    when: [{arg_not_in_task: {arg: to, kind: email}}]
+
+  - id: secret-egress           # secrets leaving through any egress tool, decoded first
+    action: deny
+    class: egress
+    when: [{any_arg_matches: {set: secret}}]
+
+  - id: data-to-unnamed-host    # outbound URL carrying data to a host the user didn't name
+    action: escalate
+    tool: http_fetch
+    when:
+      - {arg_not_in_task: {arg: url, kind: host}}
+      - {query_longer: {arg: url, len: 48}}
+
+  - id: unrequested-command     # exec only what the user literally asked for
+    action: deny
+    class: exec
+    when: [{arg_not_in_task: {arg: cmd, kind: literal}}]
+
+  - id: hint-disagrees          # server says a read-class tool is destructive: believe the worse claim
+    action: escalate
+    class: read
+    when: [{hint: destructive}]

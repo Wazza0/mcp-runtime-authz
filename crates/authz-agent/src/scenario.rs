@@ -32,16 +32,28 @@ pub struct Probe {
     pub contains: Vec<String>,
 }
 
+/// Framework mapping. ASI = OWASP Top 10 for Agentic Applications 2026 (primary),
+/// LLM = OWASP Top 10 for LLM Applications 2025, ATLAS = MITRE ATLAS technique IDs.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Refs {
+    #[serde(default)]
+    pub asi: Vec<String>,
+    #[serde(default)]
+    pub llm: Vec<String>,
+    #[serde(default)]
+    pub atlas: Vec<String>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Scenario {
     pub id: String,
     pub kind: Kind,
     #[serde(default)]
     pub class: String,
     #[serde(default)]
-    pub owasp: String,
-    #[serde(default)]
-    pub atlas: String,
+    pub refs: Refs,
     pub task: String,
     pub scope: Vec<String>,
     pub plan: Vec<PlanStep>,

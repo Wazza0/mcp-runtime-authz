@@ -57,7 +57,7 @@ pub async fn run_case(rig: &Rig, s: &Scenario, rules: &Rules, tag: &str) -> Resu
     let mcp = Mcp::spawn(&rig.server, &rig.server_args, &sandbox, &fixtures).await?;
     let audit = Audit::open(&sandbox.join("audit.jsonl"))?;
     let ctx = Ctx::new(&s.task, s.scope.clone());
-    let guard = Interceptor::new(mcp, Box::new(rules.clone()), audit, ctx);
+    let guard = Interceptor::new(mcp, Box::new(rules.clone()), audit, ctx).await?;
     let mut model = Scripted::new(s.plan.clone());
     let transcript = run(&mut model, &guard, &s.task, MAX_STEPS).await?;
     guard.close().await?;

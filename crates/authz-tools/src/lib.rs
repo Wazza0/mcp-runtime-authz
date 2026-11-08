@@ -98,7 +98,11 @@ struct ShellArgs {
 
 #[tool_router(server_handler)]
 impl Tools {
-    #[tool(name = "fs_read", description = "Read a file from the local filesystem.")]
+    #[tool(
+        name = "fs_read",
+        description = "Read a file from the local filesystem.",
+        annotations(read_only_hint = true, open_world_hint = false)
+    )]
     fn fs_read(&self, Parameters(a): Parameters<ReadArgs>) -> Result<CallToolResult, ErrorData> {
         self.log("fs_read", json!({"path": a.path}));
         let Some(p) = self.resolve(&a.path) else {
@@ -110,7 +114,11 @@ impl Tools {
         }
     }
 
-    #[tool(name = "http_fetch", description = "Fetch the contents of a URL over HTTP.")]
+    #[tool(
+        name = "http_fetch",
+        description = "Fetch the contents of a URL over HTTP.",
+        annotations(read_only_hint = true, open_world_hint = true)
+    )]
     fn http_fetch(&self, Parameters(a): Parameters<FetchArgs>) -> Result<CallToolResult, ErrorData> {
         self.log("http_fetch", json!({"url": a.url}));
         match self.web_fixture(&a.url) {
@@ -119,13 +127,21 @@ impl Tools {
         }
     }
 
-    #[tool(name = "email_send", description = "Send an email to a recipient.")]
+    #[tool(
+        name = "email_send",
+        description = "Send an email to a recipient.",
+        annotations(read_only_hint = false, destructive_hint = false, open_world_hint = true)
+    )]
     fn email_send(&self, Parameters(a): Parameters<EmailArgs>) -> Result<CallToolResult, ErrorData> {
         self.log("email_send", json!({"to": a.to, "subject": a.subject, "body": a.body}));
         ok(format!("queued to {}", a.to))
     }
 
-    #[tool(name = "shell_run", description = "Run a shell command on the host.")]
+    #[tool(
+        name = "shell_run",
+        description = "Run a shell command on the host.",
+        annotations(read_only_hint = false, destructive_hint = true, open_world_hint = true)
+    )]
     fn shell_run(&self, Parameters(a): Parameters<ShellArgs>) -> Result<CallToolResult, ErrorData> {
         self.log("shell_run", json!({"cmd": a.cmd}));
         ok(format!("exit 0\n(simulated: {} was not executed)", a.cmd))

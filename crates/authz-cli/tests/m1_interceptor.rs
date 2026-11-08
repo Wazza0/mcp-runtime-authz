@@ -31,8 +31,8 @@ async fn every_execution_has_a_prior_logged_allow() {
 async fn flipping_a_tool_to_deny_blocks_it() {
     let r = common::rig();
     let case = &load(&r.corpus().join("benign-01-meeting-email.json")).unwrap()[0];
-    let allow = Rules::parse("default: deny\ntools: {fs_read: allow, email_send: allow}").unwrap();
-    let deny = Rules::parse("default: deny\ntools: {fs_read: deny, email_send: allow}").unwrap();
+    let allow = Rules::parse("default: deny\ntools: {fs_read: {action: allow, class: read}, email_send: {action: allow, class: egress}}").unwrap();
+    let deny = Rules::parse("default: deny\ntools: {fs_read: {action: deny, class: read}, email_send: {action: allow, class: egress}}").unwrap();
 
     assert!(run_case(&r, case, &allow, "test-m1-allow").await.unwrap().reached);
 

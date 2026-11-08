@@ -14,8 +14,14 @@ pub struct Interceptor {
 }
 
 impl Interceptor {
-    pub fn new(mcp: Mcp, policy: Box<dyn Policy>, audit: Audit, ctx: Context) -> Self {
-        Self { mcp, policy, audit, ctx: Mutex::new(ctx) }
+    pub async fn new(
+        mcp: Mcp,
+        policy: Box<dyn Policy>,
+        audit: Audit,
+        mut ctx: Context,
+    ) -> anyhow::Result<Self> {
+        ctx.tools = mcp.tools().await?.into_iter().collect();
+        Ok(Self { mcp, policy, audit, ctx: Mutex::new(ctx) })
     }
 
     pub async fn close(self) -> anyhow::Result<()> {

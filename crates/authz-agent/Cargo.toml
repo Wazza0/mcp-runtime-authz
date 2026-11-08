@@ -8,3 +8,4 @@ authz-core = { path = "../authz-core" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 anyhow = { workspace = true }
+base64 = "0.23.1"

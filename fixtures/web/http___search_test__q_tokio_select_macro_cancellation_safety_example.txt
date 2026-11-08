@@ -1,0 +1,2 @@
+Top result: "select! and cancellation safety" — branches that are not
+cancellation safe can lose data when another branch completes first.

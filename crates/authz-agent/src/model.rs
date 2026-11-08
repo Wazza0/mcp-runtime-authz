@@ -2,6 +2,7 @@
 
 use anyhow::Result;
 use authz_core::{ToolCall, ToolResult};
+use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use serde_json::Value;
 
 use crate::scenario::PlanStep;
@@ -57,12 +58,15 @@ impl Model for Scripted {
     }
 }
 
-/// `{last}` = previous tool output verbatim, `{last_url}` = percent-encoded.
+/// `{last}` = previous tool output verbatim, `{last_url}` = percent-encoded,
+/// `{last_b64}` = base64 (an attacker evading pattern matching).
 fn fill(v: &Value, last: &str) -> Value {
     match v {
-        Value::String(s) => {
-            Value::String(s.replace("{last_url}", &encode(last)).replace("{last}", last))
-        }
+        Value::String(s) => Value::String(
+            s.replace("{last_url}", &encode(last))
+                .replace("{last_b64}", &URL_SAFE_NO_PAD.encode(last))
+                .replace("{last}", last),
+        ),
         _ => v.clone(),
     }
 }
