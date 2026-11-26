@@ -16,6 +16,7 @@
   <a href="https://modelcontextprotocol.io/specification/2026-07-28"><img src="https://img.shields.io/badge/MCP-2026--07--28-2a78d6" alt="MCP spec 2026-07-28"></a>
   <a href="https://scorecard.dev/viewer/?uri=github.com/Wazza0/mcp-runtime-authz"><img src="https://api.scorecard.dev/projects/github.com/Wazza0/mcp-runtime-authz/badge" alt="OpenSSF Scorecard"></a>
   <a href="https://www.bestpractices.dev/projects/16462"><img src="https://www.bestpractices.dev/projects/16462/badge" alt="OpenSSF Best Practices"></a>
+  <a href="https://glama.ai/mcp/servers/Wazza0/mcp-runtime-authz"><img src="https://glama.ai/mcp/servers/Wazza0/mcp-runtime-authz/badges/score.svg" alt="Glama MCP server score"></a>
 </p>
 
 <p align="center">
